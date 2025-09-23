@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Theme para la aplicación. Añadimos windowBackground para evitar pantalla negra durante cold-start -->
+    <style name="Theme.LugaresApp" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Background de ventana general (mientras Compose arranca) -->
+        <item name="android:windowBackground">@color/white</item>
+        <!-- Status / nav bar predeterminados para que no aparezcan negros en AVDs que usen temas oscuros por defecto -->
+        <item name="android:statusBarColor">@color/white</item>
+        <item name="android:navigationBarColor">@color/white</item>
+    </style>
+
+</resources>

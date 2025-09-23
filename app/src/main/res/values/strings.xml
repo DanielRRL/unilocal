@@ -1,0 +1,112 @@
+<!--
+    RECURSOS DE TEXTO uniLocal
+    
+    Este archivo centraliza todos los textos estáticos de la aplicación.
+    
+    BENEFICIOS DE EXTERNALIZAR STRINGS:
+    - Facilita la traducción a otros idiomas (i18n)
+    - Permite reutilizar textos en múltiples pantallas
+    - Facilita el mantenimiento y cambios de copy
+    - Sigue las mejores prácticas de Android
+    - Permite testing de textos de forma aislada
+    
+    CONVENCIONES DE NOMENCLATURA:
+    - Usar snake_case para los nombres
+    - Agrupar por funcionalidad (login_, register_, etc.)
+    - Incluir contexto en el nombre (button, title, error, etc.)
+    
+    ESTRUCTURA:
+    - Global: Strings usados en toda la app
+    - Por pantalla: Strings específicos de cada formulario/screen
+    - Validaciones: Mensajes de error y validación
+    - Legacy: Strings mantenidos para compatibilidad
+-->
+<resources>
+    <!-- IDENTIDAD DE MARCA -->
+    <string name="app_name">uniLocal</string>
+
+    <!-- ACCIONES GLOBALES -->
+    <string name="action_ok">Aceptar</string>
+    <string name="action_cancel">Cancelar</string>
+    
+    <!-- MENSAJES DE BIENVENIDA -->
+    <string name="welcome_message">Tu plataforma de confianza para descubrir lugares increíbles</string>
+    
+    <!-- CAMPOS COMUNES -->
+    <string name="email">Email</string>
+    <string name="password">Contraseña</string>
+    
+    <!-- NAVEGACIÓN Y ENLACES -->
+    <string name="forgot_password">¿Olvidaste tu contraseña?</string>
+    <string name="no_account">¿No tienes cuenta?</string>
+    <string name="register_link">Regístrate aquí</string>
+    <!-- ========================================= -->
+    <!-- FORMULARIO DE LOGIN / AUTENTICACIÓN -->
+    <!-- ========================================= -->
+    <string name="login_brand">uniLocal</string>
+    <string name="login_title">Autenticación</string>
+    <string name="login_user_label">Usuario</string>
+    <string name="login_password_label">Contraseña</string>
+    <string name="login_placeholder">Ingresar</string>
+    <string name="login_forgot_password">Olvidé mi contraseña</string>
+    <string name="login_button">Ingresar</string>
+    <string name="login_register_button">Registrarse</string>
+
+    <!-- ========================================= -->
+    <!-- FORMULARIO DE REGISTRO -->
+    <!-- ========================================= -->
+    <string name="register_title">Registro</string>
+    <string name="register_name">Nombre</string>
+    <string name="register_lastname">Apellido</string>
+    <string name="register_email">Correo</string>
+    <string name="register_phone">Teléfono</string>
+    <string name="register_password">Contraseña</string>
+    <string name="register_confirm_password">Confirmar Contraseña</string>
+    <string name="register_button">Registrarse</string>
+
+    <!-- ========================================= -->
+    <!-- RECUPERACIÓN DE CONTRASEÑA -->
+    <!-- ========================================= -->
+    <string name="recover_title">Seleccione el medio de recuperación de contraseña</string>
+    <string name="recover_method_email">Correo</string>
+    <string name="recover_method_phone">Teléfono</string>
+    <string name="recover_input_hint">Ingrese el Correo / teléfono</string>
+    <string name="recover_button">Recuperar</string>
+
+    <!-- ========================================= -->
+    <!-- EDICIÓN DE PERFIL -->
+    <!-- ========================================= -->
+    <string name="profile_edit_title">Editar perfil</string>
+    <string name="profile_name">Nombre</string>
+    <string name="profile_lastname">Apellido</string>
+    <string name="profile_email">Correo electrónico</string>
+    <string name="profile_phone">Teléfono</string>
+    <string name="profile_update_button">Guardar cambios</string>
+
+    <!-- ========================================= -->
+    <!-- CREACIÓN DE LUGARES -->
+    <!-- ========================================= -->
+    <string name="place_create_title">Crear lugar</string>
+    <string name="place_name">Nombre</string>
+    <string name="place_description">Descripción</string>
+    <string name="place_category">Categoría</string>
+    <string name="place_create_button">Crear</string>
+
+    <!-- ========================================= -->
+    <!-- MENSAJES DE VALIDACIÓN Y ERRORES -->
+    <!-- ========================================= -->
+    <string name="txt_email_error">El correo electrónico es obligatorio y debe ser válido</string>
+    <string name="txt_password_error">La contraseña debe tener al menos 5 caracteres</string>
+    <string name="txt_required_field">Este campo es obligatorio</string>
+
+    <!-- ========================================= -->
+    <!-- STRINGS LEGACY (compatibilidad) -->
+    <!-- ========================================= -->
+    <string name="title_user">Inicio usuario</string>
+    <string name="menu_home">Inicio</string>
+    <string name="menu_search">Búsqueda</string>
+    <string name="menu_my_places">Mis lugares</string>
+    <string name="menu_profile">Perfil</string>
+    <string name="title_admin">Inicio administrador</string>
+
+</resources>
