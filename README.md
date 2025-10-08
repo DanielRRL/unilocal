@@ -2998,6 +2998,539 @@ Resultado Esperado:
 - No hay crash si userID es inválido
 ```
 
+---
+
+### Step 8: Admin Screens - PlacesListScreen y HistoryScreen
+
+Se implementaron las pantallas de administración para permitir a los moderadores gestionar lugares pendientes de aprobación y visualizar el historial de decisiones de moderación.
+
+#### Archivos Modificados
+
+**1. PlacesListScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/screens/PlacesListScreen.kt`
+
+Se transformó de una pantalla vacía a una lista completa de lugares pendientes con opciones de moderación.
+
+**Cambios Realizados**:
+
+1. **Estado y ViewModels**:
+   ```kotlin
+   @Composable
+   fun PlacesListScreen() {
+       val placesViewModel: PlacesViewModel = viewModel()
+       val context = LocalContext.current
+       val sessionManager = remember { SessionManager(context) }
+       
+       val pendingPlaces by placesViewModel.places.collectAsState()
+       val moderatorId = sessionManager.getUserId()
+       
+       // Dialog state
+       var showRejectDialog by remember { mutableStateOf(false) }
+       var selectedPlaceForRejection by remember { mutableStateOf<Place?>(null) }
+   ```
+
+2. **Obtención de Lugares Pendientes**:
+   - Usa `placesViewModel.getPendingPlaces()` para filtrar lugares no aprobados
+   - Muestra mensaje cuando no hay lugares pendientes
+   - Renderiza lista usando LazyColumn con espaciado de 12dp
+
+3. **PendingPlaceCard Component**:
+   ```kotlin
+   @Composable
+   fun PendingPlaceCard(
+       place: Place,
+       onApprove: () -> Unit,
+       onReject: () -> Unit
+   ) {
+       Card {
+           Row {
+               AsyncImage(/* imagen */)
+               Column {
+                   Text(place.title) // Título
+                   Text(place.address) // Dirección
+                   Text("Tipo: ${place.type}") // Categoría
+               }
+           }
+           Row {
+               Button(onApprove) { Text("Autorizar") }
+               OutlinedButton(onReject) { Text("Rechazar") }
+           }
+       }
+   }
+   ```
+
+4. **Acciones de Moderación**:
+   - **Autorizar**: Llama `placesViewModel.approvePlace(placeId, moderatorId)`
+   - **Rechazar**: Abre diálogo para ingresar razón opcional
+   - Usa SessionManager.getUserId() para obtener moderatorId
+
+5. **RejectDialog Component**:
+   ```kotlin
+   @Composable
+   fun RejectDialog(
+       place: Place,
+       onConfirm: (String) -> Unit,
+       onDismiss: () -> Unit
+   ) {
+       AlertDialog {
+           OutlinedTextField(
+               value = reason,
+               onValueChange = { reason = it },
+               label = { Text("Razón (opcional)") },
+               maxLines = 3
+           )
+           Button(onConfirm) { Text("Rechazar") }
+           TextButton(onDismiss) { Text("Cancelar") }
+       }
+   }
+   ```
+
+6. **Diseño Visual**:
+   - Imágenes de 80dp usando Coil (AsyncImage)
+   - Botones con iconos (CheckCircle/Cancel)
+   - Colores según tipo de botón (primary/error)
+   - Card elevation de 2dp
+
+**Dependencias**:
+- PlacesViewModel (viewModel())
+- SessionManager (LocalContext)
+- Coil para carga de imágenes
+- Material Icons
+
+---
+
+**2. HistoryScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/screens/HistoryScreen.kt`
+
+Se transformó de una pantalla vacía a un historial completo de moderación con registros ordenados por fecha.
+
+**Cambios Realizados**:
+
+1. **Estado y ViewModels**:
+   ```kotlin
+   @Composable
+   fun HistoryScreen() {
+       val placesViewModel: PlacesViewModel = viewModel()
+       val moderationRecords by placesViewModel.moderationRecords.collectAsState()
+       val places by placesViewModel.places.collectAsState()
+   ```
+
+2. **Lista de Registros**:
+   - Obtiene `moderationRecords` del ViewModel
+   - Ordena por timestamp descendente (más recientes primero)
+   - Muestra mensaje cuando el historial está vacío
+   - Usa LazyColumn con espaciado de 12dp
+
+3. **ModerationRecordCard Component**:
+   ```kotlin
+   @Composable
+   fun ModerationRecordCard(
+       record: ModerationRecord,
+       placeName: String
+   ) {
+       val dateFormatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+       val formattedDate = dateFormatter.format(Date(record.timestamp))
+       
+       Card(
+           colors = if (record.action == "approved") 
+               primaryContainer else errorContainer
+       ) {
+           Row {
+               Icon(/* CheckCircle o Cancel */)
+               Column {
+                   Text("APROBADO" o "RECHAZADO")
+                   Text("Lugar: $placeName")
+                   Text("ID: ${record.placeId}")
+                   Text("Moderador: ${record.moderatorId}")
+                   Text("Fecha: $formattedDate")
+                   if (rejected && reason != null) {
+                       Text("Razón: ${record.reason}")
+                   }
+               }
+           }
+       }
+   }
+   ```
+
+4. **Formato de Fecha**:
+   - Usa SimpleDateFormat con patrón "dd/MM/yyyy HH:mm"
+   - Convierte timestamp Long (milisegundos) a Date
+   - Muestra fecha legible en español
+
+5. **Diseño Visual**:
+   - Card con color según acción (primaryContainer/errorContainer)
+   - Iconos de 32dp (CheckCircle verde / Cancel rojo)
+   - Tipografía diferenciada por tipo de información
+   - Razón de rechazo destacada en rojo cuando existe
+
+6. **Búsqueda de Nombre de Lugar**:
+   ```kotlin
+   placeName = places.find { it.id == record.placeId }?.title 
+       ?: "Lugar desconocido"
+   ```
+
+**Dependencias**:
+- PlacesViewModel (moderationRecords, places)
+- SimpleDateFormat para formato de fecha
+- Material Icons
+
+---
+
+**3. HomeAdmin.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/HomeAdmin.kt`
+
+No se requirieron modificaciones. El archivo ya tenía la estructura correcta para soportar las nuevas pantallas.
+
+**Verificación**:
+- TopBarAdmin con título
+- BottomBarAdmin para navegación
+- ContentAdmin renderiza las pantallas según navegación
+- Scaffold con padding correcto
+
+---
+
+#### Funcionalidades Implementadas
+
+1. **PlacesListScreen - Lista de Pendientes**:
+   - ✅ Obtiene lugares pendientes con `getPendingPlaces()`
+   - ✅ Muestra imagen, título, dirección y tipo
+   - ✅ Botones de Autorizar y Rechazar
+   - ✅ Diálogo para ingresar razón de rechazo
+   - ✅ Integración con SessionManager para moderatorId
+   - ✅ Llamadas a `approvePlace()` y `rejectPlace()`
+   - ✅ Actualización reactiva con StateFlow
+   - ✅ Mensaje cuando no hay pendientes
+
+2. **HistoryScreen - Historial de Moderación**:
+   - ✅ Obtiene registros de `moderationRecords` StateFlow
+   - ✅ Ordena por fecha (más recientes primero)
+   - ✅ Formato de fecha legible (dd/MM/yyyy HH:mm)
+   - ✅ Muestra acción (APROBADO/RECHAZADO)
+   - ✅ Muestra nombre de lugar (lookup por placeId)
+   - ✅ Muestra moderadorId y fecha
+   - ✅ Muestra razón si el lugar fue rechazado
+   - ✅ Colores diferenciados por tipo de acción
+   - ✅ Iconos descriptivos (CheckCircle/Cancel)
+
+3. **Separación de Responsabilidades**:
+   - ✅ Lógica en PlacesViewModel
+   - ✅ UI solo para render y acciones
+   - ✅ Sin persistencia directa en pantallas
+   - ✅ StateFlow para reactividad
+
+4. **UX/UI**:
+   - ✅ Diseño Material Design 3
+   - ✅ Feedback visual claro (colores, iconos)
+   - ✅ Diálogo de confirmación para rechazos
+   - ✅ Mensajes cuando no hay datos
+   - ✅ Layout responsive con LazyColumn
+
+---
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Autorizar un Lugar Pendiente**
+
+1. Usuario moderador abre PlacesListScreen
+2. Ve lista de lugares pendientes (approved=false)
+3. Hace clic en "Autorizar" en un lugar
+4. `placesViewModel.approvePlace(placeId, moderatorId)` se ejecuta
+5. Lugar se marca como approved=true
+6. Se crea ModerationRecord con action="approved"
+7. Lugar desaparece de la lista de pendientes
+8. Registro aparece en HistoryScreen
+
+**Ejemplo 2: Rechazar un Lugar con Razón**
+
+1. Usuario moderador hace clic en "Rechazar"
+2. Se abre RejectDialog
+3. Usuario ingresa "Información incompleta" como razón
+4. Usuario confirma
+5. `placesViewModel.rejectPlace(placeId, moderatorId, "Información incompleta")` se ejecuta
+6. Se crea ModerationRecord con action="rejected" y reason="Información incompleta"
+7. Lugar permanece con approved=false
+8. Registro aparece en HistoryScreen con razón visible
+
+**Ejemplo 3: Ver Historial de Moderación**
+
+1. Usuario moderador abre HistoryScreen
+2. Ve lista ordenada por fecha descendente
+3. Cada registro muestra:
+   - Acción (APROBADO en verde / RECHAZADO en rojo)
+   - Nombre del lugar
+   - ID del lugar
+   - ID del moderador
+   - Fecha formateada (08/10/2025 14:30)
+   - Razón (si fue rechazado)
+4. Colores de fondo según acción (primaryContainer/errorContainer)
+
+**Ejemplo 4: Moderador sin Sesión**
+
+1. Usuario abre PlacesListScreen
+2. `sessionManager.getUserId()` retorna null
+3. Botones Autorizar/Rechazar no ejecutan acciones
+4. Se requiere login previo con SessionManager.saveUserId()
+
+**Ejemplo 5: Lista Vacía**
+
+1. No hay lugares pendientes (todos approved=true)
+2. PlacesListScreen muestra: "No hay lugares pendientes de aprobación"
+3. No hay registros de moderación
+4. HistoryScreen muestra: "No hay registros de moderación"
+
+---
+
+#### Casos de Prueba
+
+#### Test Case 43: PlacesListScreen Muestra Lugares Pendientes
+```
+Precondiciones: PlacesViewModel tiene 2 lugares con approved=false
+Pasos:
+1. Abrir PlacesListScreen
+2. Verificar llamada a getPendingPlaces()
+3. Contar items en LazyColumn
+
+Resultado Esperado:
+- Muestra 2 PendingPlaceCard
+- Cada card tiene imagen, título, dirección, tipo
+- Cada card tiene botones Autorizar y Rechazar
+- Lugares con approved=true no aparecen
+```
+
+#### Test Case 44: Botón Autorizar Llama approvePlace
+```
+Precondiciones: SessionManager tiene userId="1", lugar con id="2" pendiente
+Pasos:
+1. Abrir PlacesListScreen
+2. Hacer clic en "Autorizar" del lugar "2"
+3. Verificar llamada a placesViewModel
+
+Resultado Esperado:
+- placesViewModel.approvePlace("2", "1") se ejecuta
+- Lugar "2" se marca como approved=true
+- ModerationRecord con action="approved" se crea
+- Lugar desaparece de lista de pendientes
+```
+
+#### Test Case 45: Botón Rechazar Abre Diálogo
+```
+Precondiciones: Lugar con id="3" pendiente
+Pasos:
+1. Abrir PlacesListScreen
+2. Hacer clic en "Rechazar" del lugar "3"
+3. Verificar apertura de diálogo
+
+Resultado Esperado:
+- showRejectDialog se hace true
+- selectedPlaceForRejection es el lugar "3"
+- RejectDialog se renderiza
+- Diálogo tiene título "Rechazar lugar"
+- Diálogo tiene TextField para razón
+- Diálogo tiene botones Rechazar y Cancelar
+```
+
+#### Test Case 46: Rechazar con Razón
+```
+Precondiciones: RejectDialog abierto para lugar "3", sessionManager userId="1"
+Pasos:
+1. Ingresar "Foto borrosa" en TextField
+2. Hacer clic en "Rechazar"
+3. Verificar llamada a placesViewModel
+
+Resultado Esperado:
+- placesViewModel.rejectPlace("3", "1", "Foto borrosa") se ejecuta
+- ModerationRecord con action="rejected" y reason="Foto borrosa" se crea
+- Diálogo se cierra
+- Lugar permanece con approved=false
+```
+
+#### Test Case 47: Rechazar sin Razón
+```
+Precondiciones: RejectDialog abierto, TextField vacío
+Pasos:
+1. Dejar TextField vacío
+2. Hacer clic en "Rechazar"
+3. Verificar llamada a placesViewModel
+
+Resultado Esperado:
+- placesViewModel.rejectPlace(placeId, moderatorId, null) se ejecuta
+- reason se pasa como null (no como string vacío)
+- ModerationRecord se crea sin razón
+```
+
+#### Test Case 48: Cancelar Diálogo de Rechazo
+```
+Precondiciones: RejectDialog abierto
+Pasos:
+1. Hacer clic en "Cancelar"
+2. Verificar estado
+
+Resultado Esperado:
+- showRejectDialog se hace false
+- selectedPlaceForRejection se hace null
+- No se ejecuta rejectPlace()
+- Lugar permanece en lista de pendientes
+```
+
+#### Test Case 49: PlacesListScreen sin Pendientes
+```
+Precondiciones: Todos los lugares tienen approved=true
+Pasos:
+1. Abrir PlacesListScreen
+2. Verificar getPendingPlaces() retorna lista vacía
+3. Verificar UI renderizada
+
+Resultado Esperado:
+- No se muestran PendingPlaceCard
+- Se muestra Box centrado
+- Mensaje: "No hay lugares pendientes de aprobación"
+- Color: onSurfaceVariant
+```
+
+#### Test Case 50: HistoryScreen Muestra Registros
+```
+Precondiciones: PlacesViewModel tiene 3 ModerationRecord
+Pasos:
+1. Abrir HistoryScreen
+2. Verificar moderationRecords StateFlow
+3. Contar items en LazyColumn
+
+Resultado Esperado:
+- Muestra 3 ModerationRecordCard
+- Registros ordenados por timestamp descendente
+- Más reciente aparece primero
+- Cada card tiene toda la información
+```
+
+#### Test Case 51: ModerationRecordCard Aprobado
+```
+Precondiciones: ModerationRecord con action="approved", lugar "1" existe
+Pasos:
+1. Renderizar ModerationRecordCard(record, placeName)
+2. Verificar colores y contenido
+
+Resultado Esperado:
+- Card con primaryContainer background
+- Icono CheckCircle en primary color
+- Texto "APROBADO" en primary color
+- Muestra nombre del lugar (placeName)
+- Muestra placeId, moderatorId, fecha formateada
+- No muestra razón
+```
+
+#### Test Case 52: ModerationRecordCard Rechazado con Razón
+```
+Precondiciones: ModerationRecord con action="rejected", reason="Test", lugar existe
+Pasos:
+1. Renderizar ModerationRecordCard
+2. Verificar sección de razón
+
+Resultado Esperado:
+- Card con errorContainer background
+- Icono Cancel en error color
+- Texto "RECHAZADO" en error color
+- Muestra toda la información
+- Muestra "Razón: Test" en error color con fontWeight Medium
+```
+
+#### Test Case 53: ModerationRecordCard Rechazado sin Razón
+```
+Precondiciones: ModerationRecord con action="rejected", reason=null
+Pasos:
+1. Renderizar ModerationRecordCard
+2. Verificar ausencia de razón
+
+Resultado Esperado:
+- Card con errorContainer background
+- Muestra toda la información
+- No renderiza sección de razón
+- No hay Spacer extra antes de la razón
+```
+
+#### Test Case 54: Formato de Fecha en HistoryScreen
+```
+Precondiciones: ModerationRecord con timestamp=1728396600000L (8 oct 2025 14:30)
+Pasos:
+1. Renderizar ModerationRecordCard
+2. Verificar texto de fecha
+
+Resultado Esperado:
+- SimpleDateFormat con patrón "dd/MM/yyyy HH:mm"
+- Muestra "Fecha: 08/10/2025 14:30"
+- Usa Locale.getDefault()
+- Convierte timestamp Long a Date correctamente
+```
+
+#### Test Case 55: HistoryScreen sin Registros
+```
+Precondiciones: moderationRecords está vacío
+Pasos:
+1. Abrir HistoryScreen
+2. Verificar UI renderizada
+
+Resultado Esperado:
+- No se muestran ModerationRecordCard
+- Se muestra Box centrado
+- Mensaje: "No hay registros de moderación"
+- Color: onSurfaceVariant
+```
+
+#### Test Case 56: Lookup de Nombre de Lugar en HistoryScreen
+```
+Precondiciones: ModerationRecord con placeId="2", places tiene lugar id="2" title="Bar test"
+Pasos:
+1. Renderizar HistoryScreen
+2. Verificar ModerationRecordCard
+3. Verificar nombre mostrado
+
+Resultado Esperado:
+- places.find { it.id == record.placeId } ejecuta
+- Obtiene lugar "2"
+- Muestra "Lugar: Bar test"
+- Si placeId no existe: "Lugar desconocido"
+```
+
+#### Test Case 57: SessionManager en PlacesListScreen
+```
+Precondiciones: SessionManager con userId="1"
+Pasos:
+1. Abrir PlacesListScreen
+2. Autorizar un lugar
+3. Verificar moderatorId usado
+
+Resultado Esperado:
+- SessionManager se inicializa con LocalContext.current
+- getUserId() retorna "1"
+- approvePlace("placeId", "1") usa moderatorId correcto
+- Si getUserId() es null, acciones no se ejecutan
+```
+
+#### Test Case 58: Integración Completa de Moderación
+```
+Precondiciones: Lugar id="5" pendiente, moderador id="1" en sesión
+Pasos:
+1. Abrir PlacesListScreen
+2. Autorizar lugar "5"
+3. Navegar a HistoryScreen
+4. Verificar registro
+
+Resultado Esperado:
+- Lugar "5" aprobado (approved=true)
+- ModerationRecord creado con:
+  * placeId="5"
+  * moderatorId="1"
+  * action="approved"
+  * timestamp=System.currentTimeMillis()
+  * reason=null
+- Registro aparece en HistoryScreen
+- Lugar "5" no aparece más en PlacesListScreen
+```
+
+---
+
 ## Compilación y Ejecución
 
 ### Requisitos
