@@ -13,14 +13,27 @@ import co.edu.eam.lugaresapp.ui.user.screens.PlacesScreen
 import co.edu.eam.lugaresapp.ui.user.screens.ProfileScreen
 import co.edu.eam.lugaresapp.ui.user.screens.SearchScreen
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
+import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
+/**
+ * NAVEGACIÓN INTERNA DE USUARIO
+ * 
+ * Maneja la navegación entre las pantallas del módulo de usuario.
+ * Inyecta los ViewModels necesarios para compartir estado entre pantallas.
+ * 
+ * @param padding Padding de la navegación principal
+ * @param navController Controlador de navegación interna
+ */
 @Composable
 fun ContentUser(
     padding: PaddingValues,
     navController: NavHostController
 ){
-
+    // Inicialización de ViewModels compartidos
     val placesViewModel: PlacesViewModel = viewModel()
+    val reviewsViewModel: RewiewsViewModel = viewModel()
+    val usersViewModel: UsersViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -48,6 +61,8 @@ fun ContentUser(
             val args = it.toRoute<UserScreen.PlaceDetail>()
             PlaceDetailScreen(
                 placesViewModel = placesViewModel,
+                reviewsViewModel = reviewsViewModel,
+                usersViewModel = usersViewModel,
                 padding = padding,
                 id = args.id
             )

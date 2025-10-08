@@ -1600,6 +1600,511 @@ El flujo completo desde creación hasta aprobación:
 
 ---
 
+### Step 7: PlaceDetailScreen Completo con Reseñas y Favoritos
+
+Se implementó una pantalla de detalle de lugar completamente funcional con galería de imágenes, información completa, sistema de favoritos y gestión de reseñas.
+
+#### Archivos Modificados
+
+**1. PlaceDetailScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/user/screens/PlaceDetailScreen.kt`
+
+Se transformó de una pantalla básica a una implementación completa con múltiples funcionalidades.
+
+**Cambios Realizados**:
+
+1. **Nueva Firma de Función**:
+   ```kotlin
+   @Composable
+   fun PlaceDetailScreen(
+       placesViewModel: PlacesViewModel,
+       reviewsViewModel: RewiewsViewModel,    // Nuevo
+       usersViewModel: UsersViewModel,         // Nuevo
+       padding: PaddingValues,
+       id: String,
+   )
+   ```
+
+2. **Galería de Imágenes con Scroll Horizontal**:
+   ```kotlin
+   LazyRow {
+       items(place.images) { imageUrl ->
+           AsyncImage(
+               model = imageUrl,
+               contentDescription = "Imagen de ${place.title}",
+               modifier = Modifier
+                   .width(300.dp)
+                   .height(250.dp)
+                   .clip(RoundedCornerShape(12.dp)),
+               contentScale = ContentScale.Crop
+           )
+       }
+   }
+   ```
+
+3. **Botón de Favorito con Toggle**:
+   ```kotlin
+   IconButton(
+       onClick = {
+           if (currentUserId != null) {
+               usersViewModel.toggleFavorite(currentUserId, id)
+           } else {
+               Toast.makeText(context, "Debes iniciar sesión...", Toast.LENGTH_SHORT).show()
+           }
+       }
+   ) {
+       Icon(
+           imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+           tint = if (isFavorite) Color.Red else Color.Gray
+       )
+   }
+   ```
+
+4. **Cálculo de Estado de Horario en Tiempo Real**:
+   ```kotlin
+   fun calculateScheduleStatus(schedules: List<Schedule>): String {
+       if (schedules.isEmpty()) return "Horario no definido"
+       
+       val now = LocalTime.now()
+       val today = DayOfWeek.from(LocalDateTime.now())
+       val todaySchedule = schedules.find { it.day.equals(todayName, ignoreCase = true) }
+       
+       return if (todaySchedule != null) {
+           if (now.isAfter(todaySchedule.open) && now.isBefore(todaySchedule.close)) {
+               "Abierto"
+           } else {
+               "Cerrado"
+           }
+       } else {
+           "Cerrado"
+       }
+   }
+   ```
+
+5. **Formulario de Reseñas**:
+   - Selector de estrellas (1-5) con IconButton
+   - Campo de texto para comentario (OutlinedTextField)
+   - Validación de sesión activa
+   - Validación de comentario no vacío
+   - Creación de Review con UUID y LocalDateTime
+   - Limpieza automática del formulario tras éxito
+
+6. **Lista de Reseñas con Componente Dedicado**:
+   ```kotlin
+   @Composable
+   fun ReviewCard(review: Review, usersViewModel: UsersViewModel) {
+       Card {
+           // Nombre del usuario y fecha
+           // Rating con estrellas
+           // Comentario
+           // Respuesta del propietario (si existe)
+       }
+   }
+   ```
+
+**Características Implementadas**:
+
+**Galería de Imágenes**:
+- LazyRow para scroll horizontal
+- AsyncImage de Coil para carga de imágenes
+- Placeholder automático mientras carga
+- Bordes redondeados (RoundedCornerShape)
+- ContentScale.Crop para mantener aspecto
+
+**Información del Lugar**:
+- Título con tipografía headlineMedium
+- Rating promedio con estrellas doradas
+- Número de reseñas totales
+- Badge de tipo de lugar (RESTAURANT, BAR, etc.)
+- Estado en tiempo real (Abierto/Cerrado/Horario no definido)
+- Descripción completa
+- Dirección
+- Lista de teléfonos (si existen)
+- Tabla de horarios por día (si existen)
+
+**Sistema de Favoritos**:
+- Ícono de corazón lleno/vacío
+- Toggle instantáneo con usersViewModel.toggleFavorite()
+- Validación de sesión antes de guardar
+- Toast informativo si no hay sesión
+- Color rojo para favorito activo, gris para inactivo
+
+**Sistema de Reseñas**:
+- Selector visual de estrellas (1-5)
+- Campo de texto multilínea
+- Validación de sesión
+- Validación de comentario no vacío
+- Creación con timestamp actual
+- Feedback con Toast
+- Limpieza automática del formulario
+- Actualización inmediata de la lista
+
+**Lista de Reseñas**:
+- Card por cada reseña
+- Nombre del usuario (de UsersViewModel)
+- Fecha de publicación
+- Rating con estrellas amarillas
+- Comentario completo
+- Respuesta del propietario (si existe) en Surface destacado
+- Mensaje si no hay reseñas
+
+**2. ContentUser.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/user/nav/ContentUser.kt`
+
+Se agregaron las inicializaciones de ViewModels necesarios.
+
+**Cambios Realizados**:
+
+1. **Imports Agregados**:
+   ```kotlin
+   import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
+   import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
+   ```
+
+2. **Inicialización de ViewModels**:
+   ```kotlin
+   val placesViewModel: PlacesViewModel = viewModel()
+   val reviewsViewModel: RewiewsViewModel = viewModel()  // Nuevo
+   val usersViewModel: UsersViewModel = viewModel()      // Nuevo
+   ```
+
+3. **Inyección en PlaceDetailScreen**:
+   ```kotlin
+   composable<UserScreen.PlaceDetail> {
+       val args = it.toRoute<UserScreen.PlaceDetail>()
+       PlaceDetailScreen(
+           placesViewModel = placesViewModel,
+           reviewsViewModel = reviewsViewModel,    // Inyectado
+           usersViewModel = usersViewModel,        // Inyectado
+           padding = padding,
+           id = args.id
+       )
+   }
+   ```
+
+#### Flujo de Usuario Completo
+
+**Paso 1: Navegación al Detalle**
+```
+Usuario en PlacesScreen → Click en lugar → PlaceDetailScreen(id)
+```
+
+**Paso 2: Visualización de Información**
+```
+1. Carga imágenes con Coil (AsyncImage)
+2. Muestra título, rating promedio, tipo
+3. Calcula estado de horario en tiempo real
+4. Muestra descripción, dirección, teléfonos
+5. Muestra tabla de horarios (si existe)
+```
+
+**Paso 3: Interacción con Favoritos**
+```
+if (usuarioLogueado) {
+    Click en corazón → toggleFavorite(userId, placeId)
+    → StateFlow actualizado
+    → UI se recompone
+    → Ícono cambia a lleno/vacío
+} else {
+    Toast: "Debes iniciar sesión para guardar favoritos"
+}
+```
+
+**Paso 4: Lectura de Reseñas**
+```
+1. reviewsViewModel.findByPlaceId(id)
+2. Por cada review:
+   - Buscar usuario con usersViewModel.findById(review.userID)
+   - Mostrar nombre, fecha, rating, comentario
+   - Si existe ownerResponse, mostrarlo en Surface destacado
+3. Si lista vacía: mensaje "No hay reseñas aún"
+```
+
+**Paso 5: Agregar Reseña**
+```
+1. Usuario selecciona rating (1-5 estrellas)
+2. Escribe comentario
+3. Click en "Publicar Reseña"
+
+Validaciones:
+if (currentUserId == null)
+    → Toast: "Debes iniciar sesión para agregar una reseña"
+if (reviewComment.isBlank())
+    → Toast: "El comentario no puede estar vacío"
+
+Creación:
+Review(
+    id = UUID.randomUUID().toString(),
+    userID = currentUserId,
+    placeID = id,
+    rating = reviewRating,
+    comment = reviewComment.trim(),
+    date = LocalDateTime.now(),
+    ownerResponse = null
+)
+
+reviewsViewModel.addReview(newReview)
+→ StateFlow actualizado
+→ UI se recompone
+→ Nueva reseña aparece en la lista inmediatamente
+→ Toast: "Reseña agregada exitosamente"
+→ Formulario se limpia
+```
+
+#### Componentes y Funciones Auxiliares
+
+**ReviewCard Composable**:
+```kotlin
+@Composable
+fun ReviewCard(
+    review: Review,
+    usersViewModel: UsersViewModel
+) {
+    // Busca información del usuario
+    val user = usersViewModel.findById(review.userID)
+    
+    Card {
+        // Header: nombre y fecha
+        Row {
+            Text(user?.name ?: "Usuario desconocido")
+            Text(review.date.toLocalDate().toString())
+        }
+        
+        // Rating: estrellas amarillas
+        Row {
+            repeat(review.rating) {
+                Icon(Icons.Filled.Star, tint = Color(0xFFFFC107))
+            }
+        }
+        
+        // Comentario
+        Text(review.comment)
+        
+        // Respuesta del propietario (opcional)
+        review.ownerResponse?.let { response ->
+            Surface(color = primaryContainer) {
+                Text("Respuesta del propietario")
+                Text(response)
+            }
+        }
+    }
+}
+```
+
+**calculateScheduleStatus Function**:
+```kotlin
+fun calculateScheduleStatus(schedules: List<Schedule>): String {
+    if (schedules.isEmpty()) return "Horario no definido"
+    
+    val now = LocalTime.now()
+    val today = DayOfWeek.from(LocalDateTime.now())
+    val todayName = today.getDisplayName(TextStyle.FULL, Locale("es", "ES"))
+    
+    val todaySchedule = schedules.find { 
+        it.day.equals(todayName, ignoreCase = true) 
+    }
+    
+    return if (todaySchedule != null) {
+        if (now.isAfter(todaySchedule.open) && now.isBefore(todaySchedule.close)) {
+            "Abierto"
+        } else {
+            "Cerrado"
+        }
+    } else {
+        "Cerrado"
+    }
+}
+```
+
+Esta función:
+- Obtiene la hora actual con `LocalTime.now()`
+- Obtiene el día actual con `DayOfWeek.from()`
+- Busca el horario del día actual
+- Compara si la hora actual está entre open y close
+- Retorna estado apropiado con colores (verde/rojo/gris)
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Ver Detalle de Restaurante**
+```kotlin
+// Usuario navega desde PlacesScreen
+onNavigateToPlaceDetail("1") // ID del Restaurante El Paisa
+
+// PlaceDetailScreen se carga con:
+// - Galería: placeholder image
+// - Título: "Restaurante El Paisa"
+// - Rating: 4.5 ⭐ (2 reseñas)
+// - Tipo: RESTAURANT
+// - Estado: "Abierto" (si es hora de servicio)
+// - Descripción completa
+// - Dirección
+// - Teléfonos
+// - Horarios por día
+// - 2 reseñas existentes
+```
+
+**Ejemplo 2: Marcar como Favorito**
+```kotlin
+// Usuario logueado (ID: "2") ve PlaceDetailScreen
+// Click en ícono de corazón vacío
+
+usersViewModel.toggleFavorite("2", "1")
+// favorites de usuario "2" ahora contiene "1"
+
+// UI se recompone automáticamente
+// Ícono cambia a corazón lleno rojo
+// Usuario puede desmarcar con otro click
+```
+
+**Ejemplo 3: Agregar Reseña**
+```kotlin
+// Usuario selecciona 5 estrellas
+reviewRating = 5
+
+// Escribe comentario
+reviewComment = "Excelente lugar, muy recomendado!"
+
+// Click en "Publicar Reseña"
+
+// Sistema crea:
+Review(
+    id = "uuid-generated",
+    userID = "2", // Daniel
+    placeID = "1", // Restaurante El Paisa
+    rating = 5,
+    comment = "Excelente lugar, muy recomendado!",
+    date = LocalDateTime.now(),
+    ownerResponse = null
+)
+
+reviewsViewModel.addReview(newReview)
+
+// Inmediatamente:
+// - Reseña aparece en la lista
+// - Toast: "Reseña agregada exitosamente"
+// - Formulario se limpia (rating vuelve a 5, comment vacío)
+// - Promedio se recalcula automáticamente
+```
+
+**Ejemplo 4: Ver Respuesta de Propietario**
+```kotlin
+// Reseña con respuesta del propietario
+
+Review(
+    id = "review1",
+    userID = "2",
+    placeID = "1",
+    rating = 5,
+    comment = "Excelente comida y servicio",
+    date = LocalDateTime.now().minusDays(2),
+    ownerResponse = "Gracias por tu comentario! Esperamos verte pronto."
+)
+
+// UI muestra:
+Card {
+    // Comentario del usuario
+    Text("Excelente comida y servicio")
+    
+    // Respuesta destacada
+    Surface(color = primaryContainer) {
+        Text("Respuesta del propietario", fontWeight = Bold)
+        Text("Gracias por tu comentario! Esperamos verte pronto.")
+    }
+}
+```
+
+**Ejemplo 5: Horario en Tiempo Real**
+```kotlin
+// Restaurante con horarios definidos
+schedules = [
+    Schedule(day = "lunes", open = 12:00, close = 22:00),
+    Schedule(day = "martes", open = 12:00, close = 22:00),
+    // ...
+]
+
+// Martes a las 15:30
+val now = LocalTime.of(15, 30)
+val status = calculateScheduleStatus(schedules)
+// status = "Abierto" (verde)
+
+// Martes a las 23:00
+val now = LocalTime.of(23, 0)
+val status = calculateScheduleStatus(schedules)
+// status = "Cerrado" (rojo)
+
+// Lugar sin horarios
+schedules = []
+val status = calculateScheduleStatus(schedules)
+// status = "Horario no definido" (gris)
+```
+
+#### Integración con Sistemas Existentes
+
+**SessionManager**:
+- Obtiene currentUserId para favoritos y reseñas
+- Valida sesión antes de acciones
+- Toast informativos si no hay sesión
+
+**PlacesViewModel**:
+- Obtiene información del lugar con findById()
+- Acceso a imágenes, descripción, horarios, etc.
+
+**UsersViewModel**:
+- Gestión de favoritos con toggleFavorite()
+- Consulta de favoritos con getFavorites()
+- Obtiene nombres de usuarios para reseñas
+
+**RewiewsViewModel**:
+- Obtiene reseñas con findByPlaceId()
+- Calcula promedio con getAverageRating()
+- Cuenta reseñas con getReviewCount()
+- Agrega nuevas reseñas con addReview()
+
+**Coil (AsyncImage)**:
+- Carga de imágenes desde URLs
+- Placeholder automático
+- Manejo de errores
+- Cache integrado
+
+#### Consideraciones de Diseño
+
+**UX/UI**:
+- Scroll vertical para contenido largo
+- LazyRow para galería (mejor performance)
+- Estados visuales claros (abierto/cerrado)
+- Feedback inmediato con Toast
+- Actualización reactiva sin recargas
+- Diseño responsive con padding apropiado
+
+**Seguridad**:
+- Validación de sesión en todas las acciones
+- Null-safety en todos los accesos
+- Prevención de crash si datos faltantes
+- Trim de comentarios para evitar espacios
+
+**Performance**:
+- LazyRow para imágenes (solo carga visibles)
+- StateFlow para actualizaciones eficientes
+- Recomposición inteligente de Compose
+- Cache de Coil para imágenes
+
+**Mantenibilidad**:
+- Componente ReviewCard reutilizable
+- Función calculateScheduleStatus aislada
+- Documentación KDoc completa
+- Separación de responsabilidades
+- Código legible y estructurado
+
+**Escalabilidad**:
+- Preparado para paginación de reseñas
+- Soporte para múltiples imágenes
+- Extensible para más acciones (compartir, reportar)
+- Fácil agregar más información del lugar
+
+---
+
 ## Flujo de Autenticación
 
 ### Primer Acceso (Sin Sesión)
@@ -2308,6 +2813,191 @@ Resultado Esperado:
 - Toast de éxito se muestra
 ```
 
+#### Test Case 31: Ver Detalle de Lugar con Imágenes
+```
+Precondiciones: Lugar "1" existe en PlacesViewModel
+Pasos:
+1. Navegar a PlaceDetailScreen(id = "1")
+2. Verificar galería de imágenes se muestra
+3. Scroll horizontal en galería
+4. Verificar información completa del lugar
+
+Resultado Esperado:
+- LazyRow muestra imágenes con AsyncImage
+- Scroll horizontal funciona
+- Título, descripción, dirección visibles
+- Rating promedio se calcula
+- Estado de horario se muestra
+```
+
+#### Test Case 32: Toggle Favorito desde Detalle
+```
+Precondiciones: Usuario "2" logueado, lugar "1" NO en favoritos
+Pasos:
+1. Abrir PlaceDetailScreen(id = "1")
+2. Verificar ícono de corazón vacío
+3. Click en ícono de favorito
+4. Verificar usersViewModel.getFavorites("2")
+
+Resultado Esperado:
+- Ícono cambia a corazón lleno rojo
+- usersViewModel.getFavorites("2").contains("1") == true
+- UI se actualiza inmediatamente
+- No hay recarga de pantalla
+```
+
+#### Test Case 33: Desmarcar Favorito desde Detalle
+```
+Precondiciones: Usuario "2" tiene lugar "1" en favoritos
+Pasos:
+1. Abrir PlaceDetailScreen(id = "1")
+2. Verificar ícono de corazón lleno rojo
+3. Click en ícono de favorito
+4. Verificar usersViewModel.getFavorites("2")
+
+Resultado Esperado:
+- Ícono cambia a corazón vacío gris
+- usersViewModel.getFavorites("2").contains("1") == false
+- UI se actualiza inmediatamente
+- Toggle es reversible
+```
+
+#### Test Case 34: Agregar Reseña Exitosamente
+```
+Precondiciones: Usuario "2" logueado en PlaceDetailScreen("1")
+Pasos:
+1. Seleccionar 5 estrellas
+2. Escribir comentario: "Excelente lugar"
+3. Click en "Publicar Reseña"
+4. Verificar reviewsViewModel.findByPlaceId("1")
+
+Resultado Esperado:
+- Toast: "Reseña agregada exitosamente"
+- Nueva reseña aparece en la lista inmediatamente
+- review.rating == 5
+- review.comment == "Excelente lugar"
+- review.userID == "2"
+- review.placeID == "1"
+- Formulario se limpia (comment vacío, rating = 5)
+```
+
+#### Test Case 35: Validación de Sesión al Agregar Reseña
+```
+Precondiciones: Usuario SIN login en PlaceDetailScreen
+Pasos:
+1. Seleccionar estrellas y escribir comentario
+2. Click en "Publicar Reseña"
+3. sessionManager.getUserId() retorna null
+
+Resultado Esperado:
+- Toast: "Debes iniciar sesión para agregar una reseña"
+- Reseña NO se crea
+- Formulario mantiene los datos
+- reviewsViewModel.reviews.size no aumenta
+```
+
+#### Test Case 36: Validación de Comentario Vacío
+```
+Precondiciones: Usuario logueado en PlaceDetailScreen
+Pasos:
+1. Seleccionar 4 estrellas
+2. Dejar campo comentario vacío
+3. Click en "Publicar Reseña"
+
+Resultado Esperado:
+- Toast: "El comentario no puede estar vacío"
+- Reseña NO se crea
+- Usuario puede escribir comentario
+- Rating seleccionado se mantiene
+```
+
+#### Test Case 37: Ver Reseñas con Respuestas de Propietario
+```
+Precondiciones: Lugar "1" tiene reseña con ownerResponse
+Pasos:
+1. Abrir PlaceDetailScreen(id = "1")
+2. Scroll a sección de reseñas
+3. Verificar reseña con review1
+
+Resultado Esperado:
+- Reseña muestra comentario del usuario
+- Surface destacado con "Respuesta del propietario"
+- ownerResponse se muestra completo
+- Color primario para destacar respuesta
+```
+
+#### Test Case 38: Cálculo de Estado de Horario - Abierto
+```
+Precondiciones: Lugar con schedules definidos, hora actual = 15:00
+Pasos:
+1. Schedule: lunes 12:00-22:00
+2. Hoy es lunes
+3. calculateScheduleStatus(schedules)
+
+Resultado Esperado:
+- Retorna "Abierto"
+- Badge con fondo verde claro
+- Texto color verde oscuro
+- now (15:00) está entre 12:00 y 22:00
+```
+
+#### Test Case 39: Cálculo de Estado de Horario - Cerrado
+```
+Precondiciones: Lugar con schedules, hora actual = 23:00
+Pasos:
+1. Schedule: lunes 12:00-22:00
+2. Hoy es lunes
+3. calculateScheduleStatus(schedules)
+
+Resultado Esperado:
+- Retorna "Cerrado"
+- Badge con fondo rojo claro
+- Texto color rojo oscuro
+- now (23:00) está fuera del rango
+```
+
+#### Test Case 40: Lugar Sin Horario Definido
+```
+Precondiciones: Lugar con schedules = emptyList()
+Pasos:
+1. calculateScheduleStatus(emptyList())
+
+Resultado Esperado:
+- Retorna "Horario no definido"
+- Badge con fondo gris claro
+- Texto color gris oscuro
+- No intenta calcular horario
+```
+
+#### Test Case 41: Actualización de Rating Promedio
+```
+Precondiciones: Lugar "1" con 2 reseñas (5 y 4 estrellas)
+Pasos:
+1. getAverageRating("1") == 4.5
+2. Agregar reseña de 3 estrellas
+3. getAverageRating("1")
+
+Resultado Esperado:
+- Nuevo promedio == 4.0
+- (5 + 4 + 3) / 3 = 4.0
+- UI muestra nuevo promedio inmediatamente
+- reviewCount aumenta a 3
+```
+
+#### Test Case 42: ReviewCard Muestra Usuario Correcto
+```
+Precondiciones: Review con userID = "2", usersViewModel tiene usuario "2"
+Pasos:
+1. Renderizar ReviewCard(review, usersViewModel)
+2. Verificar nombre mostrado
+
+Resultado Esperado:
+- usersViewModel.findById("2") se ejecuta
+- Muestra "Daniel" (nombre del usuario "2")
+- Si usuario no existe: "Usuario desconocido"
+- No hay crash si userID es inválido
+```
+
 ## Compilación y Ejecución
 
 ### Requisitos
@@ -2445,19 +3135,35 @@ android {
   - Feedback visual con Toast para validaciones y éxito
   - Navegación automática tras creación exitosa
   - Integración completa con PlacesViewModel
+- Pantalla de detalle de lugar completamente funcional:
+  - Galería de imágenes con scroll horizontal (LazyRow + AsyncImage/Coil)
+  - Información completa del lugar (título, descripción, dirección, teléfonos)
+  - Botón de favorito con toggle (ícono corazón lleno/vacío)
+  - Rating promedio y conteo de reseñas
+  - Badge de tipo de lugar (RESTAURANT, BAR, etc.)
+  - Estado de horario en tiempo real (Abierto/Cerrado/Horario no definido)
+  - Cálculo automático basado en hora actual y Schedule
+  - Tabla de horarios por día de la semana
+  - Lista completa de reseñas con ReviewCard
+  - Mostrar nombre de usuario, fecha, rating con estrellas
+  - Respuestas de propietarios destacadas (si existen)
+  - Formulario para agregar reseñas con selector de estrellas
+  - Validación de sesión para agregar reseña
+  - Validación de comentario no vacío
+  - Actualización inmediata de lista tras agregar reseña
+  - Integración con PlacesViewModel, RewiewsViewModel y UsersViewModel
 
 ### Funcionalidades Pendientes
 
 - Implementación completa de LoginScreen con SessionManager
 - Implementación de funcionalidad de Logout
 - UI para pantalla de moderación de administradores
-- UI para visualización y gestión de reseñas
-- UI para respuestas de propietarios a reseñas
-- UI para sección "Mis Favoritos"
-- UI para botones de favorito en PlaceDetailScreen
+- UI para sección "Mis Favoritos" dedicada
+- UI para respuestas de propietarios a reseñas (pantalla owner)
 - Validación de propiedad de lugar antes de permitir respuestas
 - Implementación de mapas para seleccionar ubicación real
 - Sistema de carga de imágenes (reemplazar placeholder)
+- Edición de lugares por propietarios
 - Formulario de horarios de atención
 - Integración con backend/API REST
 - Persistencia de datos con Room Database
@@ -2479,5 +3185,4 @@ Este proyecto es de uso académico para la institución EAM.
 
 ---
 
-**Documento generado**: 8 de octubre de 2025  
-**Versión del documento**: 1.0
+**Documento generado**: 10 de septiembre de 2025  
