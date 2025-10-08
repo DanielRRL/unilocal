@@ -360,6 +360,253 @@ val ownerResponse: String? = null  // Respuesta del propietario a la reseña
 - Soporte para estadísticas y reportes
 - Preparación para sistema de permisos más granular
 
+---
+
+### Step 3: CRUD de Lugares y Sistema de Moderación
+
+Se implementó un sistema completo de CRUD para lugares y un sistema de moderación con auditoría de acciones.
+
+#### Archivos Creados
+
+**1. ModerationRecord.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/model/ModerationRecord.kt`
+
+Modelo de datos para registrar acciones de moderación realizadas sobre lugares.
+
+**Estructura**:
+```kotlin
+data class ModerationRecord(
+    val id: String,              // ID único del registro
+    val placeId: String,         // ID del lugar moderado
+    val moderatorId: String,     // ID del moderador
+    val action: String,          // Tipo de acción (APPROVE, REJECT)
+    val timestamp: Long,         // Timestamp de la acción
+    val reason: String? = null   // Razón opcional (útil para rechazos)
+)
+```
+
+**Propósito**:
+- Auditoría completa de acciones de moderación
+- Trazabilidad de quién aprobó/rechazó qué lugar y cuándo
+- Historial para reportes y análisis
+
+#### Archivos Modificados
+
+**1. PlacesViewModel.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/viewmodel/PlacesViewModel.kt`
+
+Se extendió significativamente el ViewModel con funcionalidades CRUD y de moderación.
+
+**Estado Agregado**:
+```kotlin
+private val _moderationRecords = MutableStateFlow<List<ModerationRecord>>(emptyList())
+val moderationRecords: StateFlow<List<ModerationRecord>> = _moderationRecords.asStateFlow()
+```
+
+**Funciones CRUD Implementadas**:
+
+1. **addPlace(place: Place)**
+   - Añade un nuevo lugar a la lista
+   - Mantiene el estado de aprobación del lugar
+   - Uso: `placesViewModel.addPlace(newPlace)`
+
+2. **deletePlace(placeId: String)**
+   - Elimina un lugar por ID usando filter
+   - Mantiene inmutabilidad de la lista
+   - Uso: `placesViewModel.deletePlace("place123")`
+
+3. **create(place: Place)** (Legacy)
+   - Función mantenida por compatibilidad
+   - Internamente llama a addPlace
+   - Permite código existente continuar funcionando
+
+**Funciones de Moderación Implementadas**:
+
+1. **getPendingPlaces(): List<Place>**
+   - Retorna lugares no aprobados (approved = false)
+   - Útil para pantallas de moderación de administradores
+   - Uso: `val pending = placesViewModel.getPendingPlaces()`
+
+2. **approvePlace(placeId: String, moderatorId: String)**
+   - Marca lugar como aprobado (approved = true)
+   - Crea registro de moderación con action="APPROVE"
+   - Actualiza StateFlow automáticamente
+   - Uso: `placesViewModel.approvePlace("place123", "admin1")`
+
+3. **rejectPlace(placeId: String, moderatorId: String, reason: String?)**
+   - Marca lugar como rechazado (approved = false)
+   - Crea registro con action="REJECT" y razón opcional
+   - Permite especificar motivo del rechazo
+   - Uso: `placesViewModel.rejectPlace("place123", "admin1", "Contenido inapropiado")`
+
+4. **getApprovedPlaces(): List<Place>**
+   - Retorna solo lugares aprobados
+   - Útil para mostrar contenido público a usuarios
+   - Uso: `val approved = placesViewModel.getApprovedPlaces()`
+
+**Función Privada de Auditoría**:
+
+```kotlin
+private fun addModerationRecord(
+    placeId: String,
+    moderatorId: String,
+    action: String,
+    reason: String?
+)
+```
+- Genera ID único usando UUID
+- Captura timestamp automáticamente con System.currentTimeMillis()
+- Añade registro a _moderationRecords StateFlow
+
+**Datos de Prueba Actualizados**:
+- Lugar 1 (Restaurante El Paisa): approved = true (pre-aprobado)
+- Lugares 2-6 (Bares de prueba): approved = false (pendientes de moderación)
+
+#### Principios de Diseño Aplicados
+
+**Inmutabilidad**:
+- Todas las operaciones usan `copy()` y reasignación
+- No se modifican objetos existentes directamente
+- Pattern: `list.map { if (condition) item.copy(...) else item }`
+
+**Reactividad**:
+- StateFlow notifica cambios automáticamente
+- UI se actualiza cuando cambian places o moderationRecords
+- No se requieren callbacks manuales
+
+**Separación de Responsabilidades**:
+- CRUD: Operaciones básicas de datos
+- Moderación: Lógica de negocio específica
+- Búsqueda: Funciones de filtrado y consulta
+- Auditoría: Registro automático de acciones
+
+**Sin Efectos Secundarios**:
+- Todo permanece en memoria (ViewModel)
+- No hay I/O o llamadas a red en este step
+- Preparado para integración futura con Repository
+
+#### Casos de Uso Habilitados
+
+**Para Administradores**:
+1. Ver lugares pendientes de aprobación
+2. Aprobar lugares con registro de auditoría
+3. Rechazar lugares especificando razón
+4. Ver historial completo de moderación
+5. Eliminar lugares inapropiados
+
+**Para Usuarios**:
+1. Crear nuevos lugares (que entran en cola de moderación)
+2. Ver solo lugares aprobados
+3. Sistema transparente: no ven lugares sin aprobar
+
+**Para Auditoría**:
+1. Historial completo de acciones de moderación
+2. Identificación de moderador responsable
+3. Timestamps para análisis temporal
+4. Razones de rechazo documentadas
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Crear y Aprobar un Lugar**
+```kotlin
+// En una pantalla de administrador
+@Composable
+fun ModerationScreen(
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel
+) {
+    val pendingPlaces by placesViewModel.getPendingPlaces().collectAsState()
+    val currentUser = usersViewModel.currentUser // Asume admin logueado
+    
+    LazyColumn {
+        items(pendingPlaces) { place ->
+            PlaceCard(place) {
+                Row {
+                    Button(onClick = {
+                        placesViewModel.approvePlace(place.id, currentUser.id)
+                    }) {
+                        Text("Aprobar")
+                    }
+                    
+                    Button(onClick = {
+                        placesViewModel.rejectPlace(
+                            placeId = place.id,
+                            moderatorId = currentUser.id,
+                            reason = "Información incompleta"
+                        )
+                    }) {
+                        Text("Rechazar")
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 2: Crear Nuevo Lugar**
+```kotlin
+// En CreatePlaceScreen
+fun onCreatePlace() {
+    val newPlace = Place(
+        id = UUID.randomUUID().toString(),
+        title = title,
+        description = description,
+        address = address,
+        location = location,
+        images = imageUrls,
+        phones = phones,
+        type = selectedType,
+        schedules = schedules,
+        approved = false,  // Pendiente de moderación
+        ownerId = currentUserId,
+        createdAt = System.currentTimeMillis()
+    )
+    
+    placesViewModel.addPlace(newPlace)
+    // El lugar entra en cola de moderación automáticamente
+}
+```
+
+**Ejemplo 3: Ver Historial de Moderación**
+```kotlin
+@Composable
+fun ModerationHistoryScreen(placesViewModel: PlacesViewModel) {
+    val records by placesViewModel.moderationRecords.collectAsState()
+    
+    LazyColumn {
+        items(records.sortedByDescending { it.timestamp }) { record ->
+            Card {
+                Column {
+                    Text("Lugar: ${record.placeId}")
+                    Text("Acción: ${record.action}")
+                    Text("Moderador: ${record.moderatorId}")
+                    Text("Fecha: ${formatTimestamp(record.timestamp)}")
+                    record.reason?.let { Text("Razón: $it") }
+                }
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 4: Filtrar Lugares para Usuarios**
+```kotlin
+@Composable
+fun PlacesListScreen(placesViewModel: PlacesViewModel) {
+    // Los usuarios regulares solo ven lugares aprobados
+    val approvedPlaces by placesViewModel.getApprovedPlaces().collectAsState()
+    
+    LazyColumn {
+        items(approvedPlaces) { place ->
+            PlaceCard(place, onClick = { /* navegar a detalle */ })
+        }
+    }
+}
+```
+
 ##### Funcionalidad de Auto-Login:
 
 Se implementó la detección automática de sesión activa mediante `LaunchedEffect`:
@@ -683,6 +930,86 @@ Resultado Esperado:
 - No genera crash ni error visible
 ```
 
+### Casos de Prueba CRUD y Moderación
+
+#### Test Case 6: Agregar Lugar
+```
+Precondiciones: PlacesViewModel inicializado
+Pasos:
+1. Obtener conteo inicial: val initial = placesViewModel.places.value.size
+2. Crear nuevo lugar con approved = false
+3. Llamar placesViewModel.addPlace(newPlace)
+4. Observar places StateFlow
+
+Resultado Esperado:
+- places.value.size == initial + 1
+- Nuevo lugar aparece en la lista
+- getPendingPlaces() incluye el nuevo lugar
+- UI se actualiza automáticamente (StateFlow)
+```
+
+#### Test Case 7: Aprobar Lugar
+```
+Precondiciones: Existe lugar con approved = false (id: "2")
+Pasos:
+1. Obtener lugares pendientes: val pending = getPendingPlaces()
+2. Verificar que "2" está en pending
+3. Llamar approvePlace("2", "admin1")
+4. Verificar getPendingPlaces() nuevamente
+5. Verificar moderationRecords
+
+Resultado Esperado:
+- Lugar "2" ya no aparece en getPendingPlaces()
+- Lugar "2" tiene approved = true
+- moderationRecords contiene nuevo registro con action="APPROVE"
+- Registro tiene moderatorId="admin1" y timestamp válido
+```
+
+#### Test Case 8: Rechazar Lugar con Razón
+```
+Precondiciones: Existe lugar pendiente (id: "3")
+Pasos:
+1. Llamar rejectPlace("3", "admin1", "Contenido inapropiado")
+2. Verificar estado del lugar
+3. Buscar registro en moderationRecords
+
+Resultado Esperado:
+- Lugar "3" tiene approved = false
+- moderationRecords contiene registro con:
+  * action = "REJECT"
+  * moderatorId = "admin1"
+  * reason = "Contenido inapropiado"
+  * timestamp válido
+```
+
+#### Test Case 9: Eliminar Lugar
+```
+Precondiciones: PlacesViewModel con 6 lugares
+Pasos:
+1. Contar lugares: val count = places.value.size (debería ser 6)
+2. Llamar deletePlace("4")
+3. Verificar places StateFlow
+4. Intentar findById("4")
+
+Resultado Esperado:
+- places.value.size == count - 1
+- findById("4") retorna null
+- UI se actualiza automáticamente
+```
+
+#### Test Case 10: Filtrar Lugares Aprobados
+```
+Precondiciones: Lugares de prueba cargados (1 aprobado, 5 pendientes)
+Pasos:
+1. Llamar getApprovedPlaces()
+2. Verificar cada lugar en la lista resultante
+
+Resultado Esperado:
+- getApprovedPlaces().size == 1
+- Lugar retornado es "Restaurante El Paisa" (id: "1")
+- Todos los lugares tienen approved = true
+```
+
 ## Compilación y Ejecución
 
 ### Requisitos
@@ -784,12 +1111,23 @@ android {
   - Sistema de favoritos (campo `favorites` en User)
   - Respuestas de propietarios a reseñas (campo `ownerResponse`)
   - Timestamps de creación (campo `createdAt`)
+  - Registros de auditoría de moderación (ModerationRecord)
+- Sistema CRUD completo de lugares:
+  - Crear lugares (addPlace)
+  - Eliminar lugares (deletePlace)
+  - Buscar por ID, tipo y nombre
+  - Filtrar lugares aprobados/pendientes
+- Sistema de moderación funcional:
+  - Aprobar lugares con registro de auditoría
+  - Rechazar lugares con razón opcional
+  - Historial completo de acciones de moderación
+  - StateFlow reactivo para moderationRecords
 
 ### Funcionalidades Pendientes
 
 - Implementación completa de LoginScreen con SessionManager
 - Implementación de funcionalidad de Logout
-- Lógica de moderación de lugares (aprobación/rechazo por admin)
+- UI para pantalla de moderación de administradores
 - Sistema de gestión de favoritos (agregar/remover)
 - Interfaz para respuestas de propietarios a reseñas
 - Integración con backend/API REST
@@ -798,8 +1136,8 @@ android {
 - Carga y gestión de imágenes
 - Sistema de notificaciones
 - Validación de email y recuperación de contraseña
-- Filtrado de lugares por estado de aprobación
 - Tests unitarios e instrumentados
+- Dashboard de estadísticas de moderación
 
 ## Contacto y Contribución
 
