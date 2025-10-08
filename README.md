@@ -607,6 +607,275 @@ fun PlacesListScreen(placesViewModel: PlacesViewModel) {
 }
 ```
 
+---
+
+### Step 4: Sistema de Reseñas y Valoraciones
+
+Se implementó un ViewModel completo para la gestión de reseñas, comentarios y valoraciones de lugares, con funcionalidades de respuesta de propietarios.
+
+#### Archivos Modificados
+
+**1. RewiewsViewModel.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/viewmodel/RewiewsViewModel.kt`
+
+Se transformó de una clase vacía a un ViewModel completo con gestión de reseñas.
+
+**Estado Implementado**:
+```kotlin
+private val _reviews = MutableStateFlow<List<Review>>(emptyList())
+val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
+```
+
+**Funciones CRUD Implementadas**:
+
+1. **addReview(review: Review)**
+   - Añade una nueva reseña a la lista
+   - Notifica cambios automáticamente vía StateFlow
+   - Uso: `rewiewsViewModel.addReview(newReview)`
+
+2. **deleteReview(reviewId: String)**
+   - Elimina una reseña por ID
+   - Útil para moderación de contenido
+   - Mantiene inmutabilidad usando filter
+   - Uso: `rewiewsViewModel.deleteReview("review123")`
+
+**Funciones de Interacción**:
+
+1. **findByPlaceId(placeId: String): List<Review>**
+   - Retorna todas las reseñas de un lugar específico
+   - Útil para pantalla de detalle de lugar
+   - No modifica estado interno
+   - Uso: `val reviews = rewiewsViewModel.findByPlaceId("place1")`
+
+2. **replyToReview(reviewId: String, response: String)**
+   - Permite a propietarios responder reseñas
+   - Actualiza campo ownerResponse usando copy()
+   - Mantiene inmutabilidad total
+   - Uso: `rewiewsViewModel.replyToReview("review1", "Gracias!")`
+
+**Funciones de Consulta Avanzada**:
+
+1. **findById(reviewId: String): Review?**
+   - Busca reseña específica por ID
+
+2. **findByUserId(userId: String): List<Review>**
+   - Retorna historial de reseñas de un usuario
+
+3. **getAverageRating(placeId: String): Double**
+   - Calcula promedio de calificación de un lugar
+   - Retorna 0.0 si no hay reseñas
+
+4. **getReviewCount(placeId: String): Int**
+   - Cuenta número total de reseñas de un lugar
+
+5. **getReviewsWithResponse(placeId: String? = null): List<Review>**
+   - Filtra reseñas que tienen respuesta del propietario
+   - Útil para análisis de engagement
+
+6. **getPendingResponses(placeId: String): List<Review>**
+   - Retorna reseñas sin respuesta del propietario
+   - Útil para gestión de respuestas pendientes
+
+7. **getRecentReviews(placeId: String, limit: Int = 10): List<Review>**
+   - Retorna reseñas más recientes ordenadas por fecha
+   - Límite configurable (por defecto 10)
+
+**Datos de Prueba**:
+```kotlin
+- Review 1: Usuario "2" → Lugar "1" (Restaurante El Paisa)
+  * Rating: 5, con respuesta del propietario
+- Review 2: Usuario "2" → Lugar "1"
+  * Rating: 4, sin respuesta
+- Review 3: Usuario "2" → Lugar "2" (Bar test 1)
+  * Rating: 3, sin respuesta
+```
+
+#### Principios de Diseño Aplicados
+
+**Inmutabilidad**:
+- Uso exclusivo de `copy()` para modificaciones
+- Reasignación completa de listas
+- No hay mutación directa de objetos
+
+**Reactividad**:
+- StateFlow notifica cambios automáticamente
+- UI se actualiza sin intervención manual
+- Patrón observer integrado
+
+**Separación de Responsabilidades**:
+- CRUD: Operaciones básicas (add, delete)
+- Interacción: Respuestas y filtrado por lugar
+- Análisis: Promedios, conteos, estadísticas
+- Consulta: Búsquedas y filtros avanzados
+
+**Extensibilidad**:
+- Funciones auxiliares para casos de uso comunes
+- API clara y bien documentada
+- Preparado para integración con Repository
+
+#### Casos de Uso Habilitados
+
+**Para Usuarios Regulares**:
+1. Agregar reseñas y valoraciones a lugares
+2. Ver reseñas de otros usuarios
+3. Ver respuestas de propietarios
+4. Consultar historial propio de reseñas
+
+**Para Propietarios de Lugares**:
+1. Ver todas las reseñas de sus lugares
+2. Responder a reseñas de clientes
+3. Ver reseñas pendientes de respuesta
+4. Análisis de satisfacción (promedio de rating)
+
+**Para Administradores**:
+1. Eliminar reseñas inapropiadas
+2. Moderación de contenido
+3. Ver estadísticas globales
+4. Análisis de engagement
+
+**Para Análisis y Reportes**:
+1. Calcular promedios de calificación
+2. Contar reseñas por lugar
+3. Medir tasa de respuesta de propietarios
+4. Identificar reseñas recientes
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Agregar Nueva Reseña**
+```kotlin
+@Composable
+fun AddReviewScreen(
+    placeId: String,
+    userId: String,
+    rewiewsViewModel: RewiewsViewModel
+) {
+    var rating by remember { mutableStateOf(5) }
+    var comment by remember { mutableStateOf("") }
+    
+    Button(onClick = {
+        val newReview = Review(
+            id = UUID.randomUUID().toString(),
+            userID = userId,
+            placeID = placeId,
+            rating = rating,
+            comment = comment,
+            date = LocalDateTime.now()
+        )
+        rewiewsViewModel.addReview(newReview)
+        // Navegar atrás o mostrar confirmación
+    }) {
+        Text("Publicar Reseña")
+    }
+}
+```
+
+**Ejemplo 2: Mostrar Reseñas de un Lugar**
+```kotlin
+@Composable
+fun PlaceReviewsSection(
+    placeId: String,
+    rewiewsViewModel: RewiewsViewModel
+) {
+    val placeReviews = rewiewsViewModel.findByPlaceId(placeId)
+    val averageRating = rewiewsViewModel.getAverageRating(placeId)
+    val reviewCount = rewiewsViewModel.getReviewCount(placeId)
+    
+    Column {
+        Text("Calificación: ${String.format("%.1f", averageRating)} ($reviewCount reseñas)")
+        
+        LazyColumn {
+            items(placeReviews.sortedByDescending { it.date }) { review ->
+                ReviewCard(review)
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 3: Propietario Responde a Reseña**
+```kotlin
+@Composable
+fun OwnerResponseDialog(
+    review: Review,
+    rewiewsViewModel: RewiewsViewModel
+) {
+    var response by remember { mutableStateOf("") }
+    
+    Dialog(onDismissRequest = { /* cerrar */ }) {
+        Column {
+            Text("Responder a: ${review.comment}")
+            TextField(
+                value = response,
+                onValueChange = { response = it },
+                placeholder = { Text("Escribe tu respuesta...") }
+            )
+            Button(onClick = {
+                rewiewsViewModel.replyToReview(review.id, response)
+                // Cerrar diálogo
+            }) {
+                Text("Enviar Respuesta")
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 4: Panel de Gestión para Propietarios**
+```kotlin
+@Composable
+fun OwnerReviewManagementScreen(
+    placeId: String,
+    rewiewsViewModel: RewiewsViewModel
+) {
+    val pendingResponses = rewiewsViewModel.getPendingResponses(placeId)
+    val recentReviews = rewiewsViewModel.getRecentReviews(placeId, limit = 20)
+    val averageRating = rewiewsViewModel.getAverageRating(placeId)
+    
+    Column {
+        // Estadísticas
+        Card {
+            Text("Calificación Promedio: ${String.format("%.1f", averageRating)}")
+            Text("Respuestas Pendientes: ${pendingResponses.size}")
+        }
+        
+        // Reseñas pendientes
+        if (pendingResponses.isNotEmpty()) {
+            Text("Reseñas sin Responder", style = MaterialTheme.typography.titleMedium)
+            LazyColumn {
+                items(pendingResponses) { review ->
+                    ReviewCardWithReplyButton(review, rewiewsViewModel)
+                }
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 5: Moderación de Reseñas (Admin)**
+```kotlin
+@Composable
+fun AdminReviewModerationScreen(
+    rewiewsViewModel: RewiewsViewModel
+) {
+    val allReviews by rewiewsViewModel.reviews.collectAsState()
+    
+    LazyColumn {
+        items(allReviews.sortedByDescending { it.date }) { review ->
+            ReviewCard(review) {
+                Button(onClick = {
+                    if (/* revisar si es inapropiada */) {
+                        rewiewsViewModel.deleteReview(review.id)
+                    }
+                }) {
+                    Text("Eliminar")
+                }
+            }
+        }
+    }
+}
+```
+
 ##### Funcionalidad de Auto-Login:
 
 Se implementó la detección automática de sesión activa mediante `LaunchedEffect`:
@@ -819,6 +1088,31 @@ La aplicación incluye dos usuarios de prueba en `UsersViewModel`:
 - Role: `USER`
 - ID: `"2"`
 
+### Reseñas Predefinidas
+
+La aplicación incluye tres reseñas de prueba en `RewiewsViewModel`:
+
+**Reseña 1**:
+- Lugar: Restaurante El Paisa (ID: "1")
+- Usuario: Daniel (ID: "2")
+- Rating: 5 estrellas
+- Comentario: "Excelente comida y servicio. Muy recomendado!"
+- Con respuesta del propietario
+
+**Reseña 2**:
+- Lugar: Restaurante El Paisa (ID: "1")
+- Usuario: Daniel (ID: "2")
+- Rating: 4 estrellas
+- Comentario: "Buena comida pero un poco caro."
+- Sin respuesta del propietario
+
+**Reseña 3**:
+- Lugar: Bar test 1 (ID: "2")
+- Usuario: Daniel (ID: "2")
+- Rating: 3 estrellas
+- Comentario: "Ambiente agradable pero demoran mucho."
+- Sin respuesta del propietario
+
 ## Consideraciones de Seguridad
 
 ### Seguridad Actual (Desarrollo)
@@ -1010,6 +1304,111 @@ Resultado Esperado:
 - Todos los lugares tienen approved = true
 ```
 
+### Casos de Prueba de Reseñas
+
+#### Test Case 11: Agregar Reseña
+```
+Precondiciones: RewiewsViewModel inicializado con 3 reseñas
+Pasos:
+1. Obtener conteo inicial de reseñas del lugar "1": 
+   val initial = rewiewsViewModel.findByPlaceId("1").size
+2. Crear nueva reseña para lugar "1"
+3. Llamar rewiewsViewModel.addReview(newReview)
+4. Verificar findByPlaceId("1")
+
+Resultado Esperado:
+- findByPlaceId("1").size == initial + 1
+- Nueva reseña aparece en la lista filtrada
+- reviews StateFlow se actualiza
+- UI se recompone automáticamente
+```
+
+#### Test Case 12: Responder a Reseña
+```
+Precondiciones: Existe reseña sin respuesta (id: "review2")
+Pasos:
+1. Verificar review2.ownerResponse == null
+2. Llamar replyToReview("review2", "Gracias por tu feedback!")
+3. Buscar reseña actualizada: findById("review2")
+4. Verificar en findByPlaceId("1")
+
+Resultado Esperado:
+- review2.ownerResponse == "Gracias por tu feedback!"
+- Cambio se refleja en todas las consultas
+- StateFlow notifica cambio
+- Otras reseñas permanecen sin cambios
+```
+
+#### Test Case 13: Calcular Promedio de Rating
+```
+Precondiciones: Lugar "1" tiene 2 reseñas (rating 5 y 4)
+Pasos:
+1. Llamar getAverageRating("1")
+2. Agregar nueva reseña con rating 3
+3. Llamar getAverageRating("1") nuevamente
+
+Resultado Esperado:
+- Primer llamado retorna 4.5
+- Segundo llamado retorna 4.0 ((5+4+3)/3)
+- Cálculo es correcto y dinámico
+```
+
+#### Test Case 14: Filtrar Reseñas Pendientes de Respuesta
+```
+Precondiciones: Lugar "1" tiene reseñas con y sin respuesta
+Pasos:
+1. Llamar getPendingResponses("1")
+2. Verificar cada reseña en la lista
+
+Resultado Esperado:
+- Lista contiene solo review2 (sin respuesta)
+- review1 (con respuesta) no aparece
+- Filtro funciona correctamente
+```
+
+#### Test Case 15: Eliminar Reseña
+```
+Precondiciones: RewiewsViewModel con 3 reseñas
+Pasos:
+1. Contar reseñas: val count = reviews.value.size (debería ser 3)
+2. Llamar deleteReview("review3")
+3. Verificar reviews StateFlow
+4. Intentar findById("review3")
+
+Resultado Esperado:
+- reviews.value.size == 2
+- findById("review3") retorna null
+- findByPlaceId("2") retorna lista vacía
+- UI se actualiza automáticamente
+```
+
+#### Test Case 16: Obtener Reseñas Recientes
+```
+Precondiciones: Múltiples reseñas con diferentes fechas
+Pasos:
+1. Llamar getRecentReviews("1", limit = 2)
+2. Verificar orden de las reseñas retornadas
+
+Resultado Esperado:
+- Retorna máximo 2 reseñas
+- Ordenadas de más reciente a más antigua
+- Solo del lugar especificado ("1")
+```
+
+#### Test Case 17: Contar Reseñas por Lugar
+```
+Precondiciones: Datos de prueba cargados
+Pasos:
+1. Llamar getReviewCount("1") 
+2. Llamar getReviewCount("2")
+3. Llamar getReviewCount("999") (lugar sin reseñas)
+
+Resultado Esperado:
+- getReviewCount("1") == 2
+- getReviewCount("2") == 1
+- getReviewCount("999") == 0
+```
+
 ## Compilación y Ejecución
 
 ### Requisitos
@@ -1099,6 +1498,57 @@ android {
 - Arquitectura MVVM completa
 - Sistema de navegación con Jetpack Navigation Compose
 - Gestión de sesión con SharedPreferences (SessionManager)
+- Auto-login en inicio de aplicación
+- Pantallas de autenticación (Login, Register, Password Recovery)
+- Interfaces diferenciadas para Usuario y Administrador
+- ViewModels para gestión de usuarios, lugares y reseñas
+- Componentes UI reutilizables
+- Tema Material 3 personalizado
+- Modelos de datos extendidos con soporte para:
+  - Moderación de lugares (campo `approved`)
+  - Propiedad de lugares (campo `ownerId`)
+  - Sistema de favoritos (campo `favorites` en User)
+  - Respuestas de propietarios a reseñas (campo `ownerResponse`)
+  - Timestamps de creación (campo `createdAt`)
+  - Registros de auditoría de moderación (ModerationRecord)
+- Sistema CRUD completo de lugares:
+  - Crear lugares (addPlace)
+  - Eliminar lugares (deletePlace)
+  - Buscar por ID, tipo y nombre
+  - Filtrar lugares aprobados/pendientes
+- Sistema de moderación funcional:
+  - Aprobar lugares con registro de auditoría
+  - Rechazar lugares con razón opcional
+  - Historial completo de acciones de moderación
+  - StateFlow reactivo para moderationRecords
+- Sistema completo de reseñas y valoraciones:
+  - Agregar y eliminar reseñas (addReview, deleteReview)
+  - Responder a reseñas como propietario (replyToReview)
+  - Filtrar reseñas por lugar (findByPlaceId)
+  - Calcular promedios de rating (getAverageRating)
+  - Contar reseñas por lugar (getReviewCount)
+  - Filtrar reseñas con/sin respuesta
+  - Obtener reseñas recientes ordenadas
+  - Historial de reseñas por usuario
+  - StateFlow reactivo para reviews
+
+### Funcionalidades Pendientes
+
+- Implementación completa de LoginScreen con SessionManager
+- Implementación de funcionalidad de Logout
+- UI para pantalla de moderación de administradores
+- UI para visualización y gestión de reseñas
+- UI para respuestas de propietarios a reseñas
+- Sistema de gestión de favoritos (agregar/remover)
+- Validación de propiedad de lugar antes de permitir respuestas
+- Integración con backend/API REST
+- Persistencia de datos con Room Database
+- Funcionalidad de mapas con Google Maps
+- Carga y gestión de imágenes
+- Sistema de notificaciones
+- Validación de email y recuperación de contraseña
+- Tests unitarios e instrumentados
+- Dashboard de estadísticas de moderación y reseñas
 - Auto-login en inicio de aplicación
 - Pantallas de autenticación (Login, Register, Password Recovery)
 - Interfaces diferenciadas para Usuario y Administrador
