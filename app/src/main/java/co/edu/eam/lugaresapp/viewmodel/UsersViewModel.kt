@@ -197,4 +197,93 @@ class UsersViewModel: ViewModel(){
         return true // Registro exitoso
     }
 
+    // ==================== GESTIÓN DE FAVORITOS ====================
+
+    /**
+     * TOGGLE DE FAVORITO
+     * 
+     * Alterna el estado de un lugar en la lista de favoritos de un usuario.
+     * Si el lugar ya está en favoritos, lo remueve. Si no está, lo añade.
+     * 
+     * FUNCIONAMIENTO:
+     * - Busca el usuario por ID
+     * - Crea una lista mutable de sus favoritos
+     * - Si el placeId existe, lo remueve
+     * - Si no existe, lo añade
+     * - Actualiza el usuario con la nueva lista de favoritos
+     * - Reasigna el StateFlow completo para mantener inmutabilidad
+     * 
+     * PATRÓN DE INMUTABILIDAD:
+     * - No modifica objetos directamente
+     * - Usa copy() para crear nuevas instancias
+     * - Reasigna _users.value completamente
+     * - Esto garantiza que StateFlow detecte el cambio y notifique a la UI
+     * 
+     * @param userId: String - ID del usuario que marca/desmarca favorito
+     * @param placeId: String - ID del lugar a marcar/desmarcar como favorito
+     * 
+     * EJEMPLO DE USO:
+     * ```
+     * // Usuario marca lugar como favorito
+     * usersViewModel.toggleFavorite("2", "place123")
+     * 
+     * // Usuario desmarca el mismo lugar (segundo click)
+     * usersViewModel.toggleFavorite("2", "place123")
+     * ```
+     */
+    fun toggleFavorite(userId: String, placeId: String) {
+        _users.value = _users.value.map { user ->
+            if (user.id == userId) {
+                // Crear lista mutable de favoritos para modificarla
+                val favs = user.favorites.toMutableList()
+                
+                // Toggle: remover si existe, añadir si no existe
+                if (favs.contains(placeId)) {
+                    favs.remove(placeId)
+                } else {
+                    favs.add(placeId)
+                }
+                
+                // Retornar copia del usuario con lista actualizada
+                user.copy(favorites = favs)
+            } else {
+                // Mantener otros usuarios sin cambios
+                user
+            }
+        }
+    }
+
+    /**
+     * OBTENER LISTA DE FAVORITOS
+     * 
+     * Retorna la lista de IDs de lugares favoritos de un usuario específico.
+     * 
+     * FUNCIONAMIENTO:
+     * - Busca el usuario por ID
+     * - Si existe, retorna su lista de favoritos
+     * - Si no existe, retorna lista vacía
+     * 
+     * Esta función es útil para:
+     * - Mostrar sección "Mis Favoritos" en la UI
+     * - Verificar si un lugar específico está en favoritos
+     * - Obtener conteo de favoritos del usuario
+     * 
+     * @param userId: String - ID del usuario
+     * @return List<String> - Lista de IDs de lugares favoritos (vacía si usuario no existe)
+     * 
+     * EJEMPLO DE USO:
+     * ```
+     * val favoriteIds = usersViewModel.getFavorites("2")
+     * val favoritePlaces = favoriteIds.map { id -> 
+     *     placesViewModel.findById(id) 
+     * }
+     * 
+     * // Verificar si un lugar está en favoritos
+     * val isFavorite = usersViewModel.getFavorites("2").contains("place123")
+     * ```
+     */
+    fun getFavorites(userId: String): List<String> {
+        return _users.value.find { it.id == userId }?.favorites ?: emptyList()
+    }
+
 }

@@ -911,6 +911,303 @@ LaunchedEffect(Unit) {
 5. Limpia el backstack para prevenir navegación incorrecta
 6. Si el usuario no existe, limpia la sesión automáticamente
 
+---
+
+### Step 5: Gestión de Favoritos en UsersViewModel
+
+Se implementó la funcionalidad completa de favoritos, permitiendo a los usuarios marcar y desmarcar lugares como favoritos, con persistencia en el estado del ViewModel.
+
+#### Archivos Modificados
+
+**1. UsersViewModel.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/viewmodel/UsersViewModel.kt`
+
+Se agregaron dos funciones públicas para la gestión de favoritos.
+
+**Funciones Implementadas**:
+
+1. **toggleFavorite(userId: String, placeId: String)**
+   - Alterna el estado de un lugar en la lista de favoritos
+   - Si el lugar ya está en favoritos, lo remueve
+   - Si no está, lo añade
+   - Mantiene inmutabilidad mediante `copy()` y reasignación completa
+   
+   **Funcionamiento Interno**:
+   ```kotlin
+   fun toggleFavorite(userId: String, placeId: String) {
+       _users.value = _users.value.map { user ->
+           if (user.id == userId) {
+               val favs = user.favorites.toMutableList()
+               if (favs.contains(placeId)) {
+                   favs.remove(placeId)
+               } else {
+                   favs.add(placeId)
+               }
+               user.copy(favorites = favs)
+           } else {
+               user
+           }
+       }
+   }
+   ```
+   
+   **Características**:
+   - Operación atómica: reasigna `_users.value` completamente
+   - No modifica objetos existentes directamente
+   - StateFlow notifica cambios automáticamente a la UI
+   - Solo modifica el usuario específico, mantiene otros sin cambios
+
+2. **getFavorites(userId: String): List<String>**
+   - Retorna la lista de IDs de lugares favoritos de un usuario
+   - Retorna lista vacía si el usuario no existe
+   - Operación de solo lectura, no modifica estado
+   
+   **Funcionamiento Interno**:
+   ```kotlin
+   fun getFavorites(userId: String): List<String> {
+       return _users.value.find { it.id == userId }?.favorites ?: emptyList()
+   }
+   ```
+   
+   **Características**:
+   - Operación segura con null-safety (`?.` y `?:`)
+   - No genera excepciones si el usuario no existe
+   - Útil para consultas y validaciones
+
+#### Principios de Diseño Aplicados
+
+**Inmutabilidad Total**:
+- Uso de `toMutableList()` para crear copia temporal
+- Aplicación de `copy()` para crear nueva instancia de User
+- Reasignación completa de `_users.value`
+- Patrón: `_users.value = _users.value.map { ... }`
+
+**Atomicidad**:
+- Una sola asignación a `_users.value`
+- StateFlow garantiza que los observadores reciban el estado completo
+- No hay estados intermedios visibles
+
+**Encapsulación**:
+- `_users` es privado (MutableStateFlow)
+- `users` es público de solo lectura (StateFlow)
+- Modificaciones solo a través de funciones públicas del ViewModel
+
+**Eficiencia**:
+- `map()` recorre la lista una sola vez
+- Solo crea nuevas instancias del usuario modificado
+- Otros usuarios se mantienen por referencia (sin copia)
+
+#### Casos de Uso Habilitados
+
+**Para Usuarios Regulares**:
+1. Marcar lugares como favoritos desde PlaceDetailScreen
+2. Desmarcar lugares de favoritos con el mismo botón (toggle)
+3. Ver sección "Mis Favoritos" en HomeUser
+4. Acceso rápido a lugares guardados
+
+**Para la UI**:
+1. Actualización automática del ícono de favorito (corazón lleno/vacío)
+2. Sincronización entre múltiples pantallas
+3. Contador de favoritos en perfil
+4. Lista filtrada de lugares favoritos
+
+**Para Análisis**:
+1. Identificar lugares más guardados como favoritos
+2. Personalización de recomendaciones
+3. Estadísticas de engagement de usuario
+4. Identificar lugares populares sin reseñas
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Marcar/Desmarcar Favorito desde PlaceDetailScreen**
+```kotlin
+@Composable
+fun PlaceDetailScreen(
+    placeId: String,
+    usersViewModel: UsersViewModel,
+    navController: NavController
+) {
+    val context = LocalContext.current
+    val sessionManager = SessionManager(context)
+    val currentUserId = sessionManager.getUserId()
+    
+    // Obtener lista de favoritos del usuario actual
+    val favorites = currentUserId?.let { 
+        usersViewModel.getFavorites(it) 
+    } ?: emptyList()
+    
+    val isFavorite = favorites.contains(placeId)
+    
+    Column {
+        // Información del lugar...
+        
+        // Botón de favorito
+        IconButton(
+            onClick = {
+                currentUserId?.let { userId ->
+                    usersViewModel.toggleFavorite(userId, placeId)
+                }
+            }
+        ) {
+            Icon(
+                imageVector = if (isFavorite) {
+                    Icons.Filled.Favorite
+                } else {
+                    Icons.Outlined.FavoriteBorder
+                },
+                contentDescription = if (isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                tint = if (isFavorite) Color.Red else Color.Gray
+            )
+        }
+    }
+}
+```
+
+**Ejemplo 2: Pantalla de Favoritos del Usuario**
+```kotlin
+@Composable
+fun FavoritesScreen(
+    usersViewModel: UsersViewModel,
+    placesViewModel: PlacesViewModel,
+    navController: NavController
+) {
+    val context = LocalContext.current
+    val sessionManager = SessionManager(context)
+    val currentUserId = sessionManager.getUserId()
+    
+    val favoriteIds = currentUserId?.let { 
+        usersViewModel.getFavorites(it) 
+    } ?: emptyList()
+    
+    val allPlaces by placesViewModel.places.collectAsState()
+    val favoritePlaces = allPlaces.filter { place ->
+        favoriteIds.contains(place.id)
+    }
+    
+    Column {
+        Text(
+            text = "Mis Favoritos (${favoritePlaces.size})",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        
+        if (favoritePlaces.isEmpty()) {
+            Text("No tienes lugares favoritos aún")
+        } else {
+            LazyColumn {
+                items(favoritePlaces) { place ->
+                    PlaceCard(
+                        place = place,
+                        onClick = { 
+                            navController.navigate("place/${place.id}") 
+                        },
+                        onFavoriteClick = {
+                            currentUserId?.let { userId ->
+                                usersViewModel.toggleFavorite(userId, place.id)
+                            }
+                        },
+                        isFavorite = true
+                    )
+                }
+            }
+        }
+    }
+}
+```
+
+**Ejemplo 3: Contador de Favoritos en Perfil**
+```kotlin
+@Composable
+fun ProfileScreen(usersViewModel: UsersViewModel) {
+    val context = LocalContext.current
+    val sessionManager = SessionManager(context)
+    val currentUserId = sessionManager.getUserId()
+    
+    val user = currentUserId?.let { 
+        usersViewModel.findById(it) 
+    }
+    
+    val favoritesCount = currentUserId?.let { 
+        usersViewModel.getFavorites(it).size 
+    } ?: 0
+    
+    Column {
+        Text("Perfil de ${user?.name}")
+        
+        Row {
+            StatItem(
+                label = "Lugares Favoritos",
+                value = favoritesCount.toString()
+            )
+            // Otras estadísticas...
+        }
+    }
+}
+```
+
+#### Integración con SessionManager
+
+Las funciones de favoritos se integran perfectamente con el sistema de sesión:
+
+```kotlin
+// Patrón recomendado para todas las pantallas que usan favoritos
+@Composable
+fun AnyScreen(usersViewModel: UsersViewModel) {
+    val context = LocalContext.current
+    val sessionManager = SessionManager(context)
+    val currentUserId = sessionManager.getUserId()
+    
+    // Siempre verificar que hay sesión activa antes de usar favoritos
+    currentUserId?.let { userId ->
+        val favorites = usersViewModel.getFavorites(userId)
+        // Usar favorites...
+    }
+}
+```
+
+#### Validación y Pruebas
+
+**Comportamiento Esperado**:
+
+1. **Toggle Exitoso**:
+   - Primera llamada: añade placeId a favorites
+   - Segunda llamada: remueve placeId de favorites
+   - StateFlow notifica cambio inmediatamente
+
+2. **Seguridad Null**:
+   - getFavorites con userId inexistente retorna lista vacía
+   - toggleFavorite con userId inexistente no genera error
+
+3. **Inmutabilidad**:
+   - No se modifican objetos User existentes
+   - Cada cambio crea nueva instancia con copy()
+
+4. **Atomicidad**:
+   - Un solo update al StateFlow por operación
+   - No hay estados intermedios observables
+
+#### Consideraciones de Diseño
+
+**Persistencia**:
+- Actualmente en memoria (ViewModel)
+- Para producción: sincronizar con backend/base de datos
+- Considerar implementar Repository pattern
+
+**Sincronización**:
+- Múltiples pantallas se actualizan automáticamente
+- StateFlow garantiza consistencia
+
+**Escalabilidad**:
+- Operación O(n) donde n = número de usuarios
+- Para grandes volúmenes, considerar índices o caché
+
+**UX**:
+- Toggle inmediato sin loading
+- Feedback visual instantáneo
+- No requiere confirmación (reversible)
+
+---
+
 ## Flujo de Autenticación
 
 ### Primer Acceso (Sin Sesión)
@@ -1409,6 +1706,83 @@ Resultado Esperado:
 - getReviewCount("999") == 0
 ```
 
+#### Test Case 18: Marcar Lugar como Favorito
+```
+Precondiciones: Usuario con ID "2" sin favoritos
+Pasos:
+1. Verificar getFavorites("2").isEmpty() == true
+2. Llamar toggleFavorite("2", "place1")
+3. Verificar getFavorites("2")
+
+Resultado Esperado:
+- getFavorites("2") contiene "place1"
+- getFavorites("2").size == 1
+- UI muestra ícono de favorito lleno
+- StateFlow notifica cambio
+```
+
+#### Test Case 19: Desmarcar Favorito (Toggle Off)
+```
+Precondiciones: Usuario "2" tiene "place1" en favoritos
+Pasos:
+1. Verificar getFavorites("2").contains("place1") == true
+2. Llamar toggleFavorite("2", "place1")
+3. Verificar getFavorites("2")
+
+Resultado Esperado:
+- getFavorites("2") NO contiene "place1"
+- getFavorites("2").isEmpty() == true
+- UI muestra ícono de favorito vacío
+- StateFlow notifica cambio
+```
+
+#### Test Case 20: Múltiples Favoritos
+```
+Precondiciones: Usuario "2" sin favoritos
+Pasos:
+1. Llamar toggleFavorite("2", "place1")
+2. Llamar toggleFavorite("2", "place2")
+3. Llamar toggleFavorite("2", "place3")
+4. Verificar getFavorites("2")
+
+Resultado Esperado:
+- getFavorites("2").size == 3
+- Contiene "place1", "place2", "place3"
+- Todos los lugares se pueden desmarcar individualmente
+- Orden de inserción se mantiene
+```
+
+#### Test Case 21: Favoritos de Usuario Inexistente
+```
+Precondiciones: Usuario con ID "999" no existe
+Pasos:
+1. Llamar getFavorites("999")
+2. Llamar toggleFavorite("999", "place1")
+3. Verificar getFavorites("999")
+
+Resultado Esperado:
+- Primera llamada retorna lista vacía (emptyList())
+- toggleFavorite no genera excepción
+- Segunda llamada retorna lista vacía
+- No se crea usuario automáticamente
+```
+
+#### Test Case 22: Sincronización de Favoritos entre Pantallas
+```
+Precondiciones: Usuario "2" logueado, dos pantallas observando getFavorites
+Pasos:
+1. PlaceDetailScreen muestra ícono de favorito vacío
+2. FavoritesScreen muestra lista vacía
+3. Usuario hace click en favorito en PlaceDetailScreen
+4. Verificar ambas pantallas se actualizan
+
+Resultado Esperado:
+- PlaceDetailScreen muestra ícono lleno inmediatamente
+- FavoritesScreen muestra el lugar en la lista
+- Ambas pantallas reaccionan al cambio de StateFlow
+- No hay delay en actualización
+```
+
 ## Compilación y Ejecución
 
 ### Requisitos
@@ -1531,6 +1905,11 @@ android {
   - Obtener reseñas recientes ordenadas
   - Historial de reseñas por usuario
   - StateFlow reactivo para reviews
+- Sistema de gestión de favoritos:
+  - Marcar/desmarcar lugares como favoritos (toggleFavorite)
+  - Obtener lista de favoritos del usuario (getFavorites)
+  - Persistencia en memoria mediante StateFlow
+  - Actualización reactiva en UI
 
 ### Funcionalidades Pendientes
 
@@ -1539,7 +1918,8 @@ android {
 - UI para pantalla de moderación de administradores
 - UI para visualización y gestión de reseñas
 - UI para respuestas de propietarios a reseñas
-- Sistema de gestión de favoritos (agregar/remover)
+- UI para sección "Mis Favoritos"
+- UI para botones de favorito en PlaceDetailScreen
 - Validación de propiedad de lugar antes de permitir respuestas
 - Integración con backend/API REST
 - Persistencia de datos con Room Database
@@ -1549,45 +1929,6 @@ android {
 - Validación de email y recuperación de contraseña
 - Tests unitarios e instrumentados
 - Dashboard de estadísticas de moderación y reseñas
-- Auto-login en inicio de aplicación
-- Pantallas de autenticación (Login, Register, Password Recovery)
-- Interfaces diferenciadas para Usuario y Administrador
-- ViewModels para gestión de usuarios, lugares y reseñas
-- Componentes UI reutilizables
-- Tema Material 3 personalizado
-- Modelos de datos extendidos con soporte para:
-  - Moderación de lugares (campo `approved`)
-  - Propiedad de lugares (campo `ownerId`)
-  - Sistema de favoritos (campo `favorites` en User)
-  - Respuestas de propietarios a reseñas (campo `ownerResponse`)
-  - Timestamps de creación (campo `createdAt`)
-  - Registros de auditoría de moderación (ModerationRecord)
-- Sistema CRUD completo de lugares:
-  - Crear lugares (addPlace)
-  - Eliminar lugares (deletePlace)
-  - Buscar por ID, tipo y nombre
-  - Filtrar lugares aprobados/pendientes
-- Sistema de moderación funcional:
-  - Aprobar lugares con registro de auditoría
-  - Rechazar lugares con razón opcional
-  - Historial completo de acciones de moderación
-  - StateFlow reactivo para moderationRecords
-
-### Funcionalidades Pendientes
-
-- Implementación completa de LoginScreen con SessionManager
-- Implementación de funcionalidad de Logout
-- UI para pantalla de moderación de administradores
-- Sistema de gestión de favoritos (agregar/remover)
-- Interfaz para respuestas de propietarios a reseñas
-- Integración con backend/API REST
-- Persistencia de datos con Room Database
-- Funcionalidad de mapas con Google Maps
-- Carga y gestión de imágenes
-- Sistema de notificaciones
-- Validación de email y recuperación de contraseña
-- Tests unitarios e instrumentados
-- Dashboard de estadísticas de moderación
 
 ## Contacto y Contribución
 
