@@ -1208,6 +1208,398 @@ fun AnyScreen(usersViewModel: UsersViewModel) {
 
 ---
 
+### Step 6: Formulario de Creación de Lugares con Validaciones
+
+Se implementó la funcionalidad completa del formulario de creación de lugares, incluyendo validaciones, integración con sesión activa y asignación automática de propietario.
+
+#### Archivos Modificados
+
+**1. CreatePlaceScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/places/CreatePlaceScreen.kt`
+
+Se transformó de un formulario básico a una implementación completa con validaciones y lógica de negocio.
+
+**Cambios Realizados**:
+
+1. **Nueva Firma de Función**:
+   ```kotlin
+   @Composable
+   fun CreatePlaceScreen(
+       placesViewModel: PlacesViewModel,  // ViewModel inyectado
+       onNavigateBack: () -> Unit
+   )
+   ```
+
+2. **Campos del Formulario Completos**:
+   - Nombre del lugar (obligatorio)
+   - Descripción (mínimo 10 caracteres)
+   - Dirección (obligatorio)
+   - Teléfono (opcional)
+   - Categoría (dropdown con PlaceType)
+
+3. **Integración con SessionManager**:
+   ```kotlin
+   val context = LocalContext.current
+   val sessionManager = remember { SessionManager(context) }
+   ```
+
+4. **Sistema de Validaciones**:
+   - Validación de campos obligatorios
+   - Validación de longitud mínima de descripción
+   - Verificación de sesión activa antes de crear
+   - Feedback mediante Toast para cada error
+
+5. **Lógica de Creación de Lugar**:
+   ```kotlin
+   val newPlace = Place(
+       id = UUID.randomUUID().toString(),
+       title = name.trim(),
+       description = description.trim(),
+       address = address.trim(),
+       location = Location(0.0, 0.0), // Temporal
+       images = listOf("https://via.placeholder.com/300x200?text=Lugar"),
+       phones = if (phone.isNotBlank()) listOf(phone.trim()) else emptyList(),
+       type = selectedType,
+       schedules = emptyList(),
+       approved = false, // Requiere moderación
+       ownerId = currentUserId, // Usuario propietario
+       createdAt = System.currentTimeMillis()
+   )
+   
+   placesViewModel.addPlace(newPlace)
+   ```
+
+**Características Implementadas**:
+
+- **Dropdown Material 3**: ExposedDropdownMenuBox para selección de categoría
+- **Scroll Vertical**: Soporte para pantallas pequeñas
+- **Estados Reactivos**: Todos los campos usan `remember { mutableStateOf() }`
+- **Validación de Sesión**: Previene creación sin login
+- **Mensajes de Error**: Toast informativos para cada validación
+- **Mensaje de Éxito**: Confirma creación y estado de moderación
+- **Navegación Automática**: Vuelve atrás tras creación exitosa
+
+**2. Navigation.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/navigation/Navigation.kt`
+
+Se agregó la inyección del PlacesViewModel para disponibilidad global.
+
+**Cambios Realizados**:
+
+1. **Import Agregado**:
+   ```kotlin
+   import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+   ```
+
+2. **Inicialización del ViewModel**:
+   ```kotlin
+   val usersViewModel: UsersViewModel = viewModel()
+   val placesViewModel: PlacesViewModel = viewModel() // Nuevo
+   ```
+
+3. **Inyección en Ruta**:
+   ```kotlin
+   composable(RouteScreen.CreatePlace.route) {
+       CreatePlaceScreen(
+           placesViewModel = placesViewModel, // Inyectado
+           onNavigateBack = { navController.popBackStack() }
+       )
+   }
+   ```
+
+#### Flujo de Creación de Lugar
+
+**Paso 1: Usuario Accede al Formulario**
+```
+Usuario logueado → Click en "Crear Lugar" → CreatePlaceScreen se muestra
+```
+
+**Paso 2: Llenar Formulario**
+```
+1. Ingresar nombre del lugar
+2. Escribir descripción (mín. 10 caracteres)
+3. Ingresar dirección
+4. [Opcional] Agregar teléfono
+5. Seleccionar categoría del dropdown
+```
+
+**Paso 3: Validaciones al Hacer Click en "Crear"**
+```
+if (name.isBlank())
+    └─> Toast: "El nombre del lugar es obligatorio"
+        └─> RETURN (no crea)
+
+if (description.length < 10)
+    └─> Toast: "La descripción debe tener al menos 10 caracteres"
+        └─> RETURN (no crea)
+
+if (address.isBlank())
+    └─> Toast: "La dirección es obligatoria"
+        └─> RETURN (no crea)
+
+val currentUserId = sessionManager.getUserId()
+if (currentUserId == null)
+    └─> Toast: "Debes iniciar sesión para crear un lugar"
+        └─> RETURN (no crea)
+```
+
+**Paso 4: Creación Exitosa**
+```
+Crear objeto Place con:
+- ID único (UUID)
+- Datos del formulario (trimmed)
+- ownerId = currentUserId
+- approved = false
+- createdAt = timestamp actual
+
+placesViewModel.addPlace(newPlace)
+    └─> StateFlow actualizado
+        └─> UI se actualiza automáticamente
+
+Toast: "Lugar creado. Pendiente de aprobación"
+onNavigateBack()
+```
+
+#### Validaciones Implementadas
+
+**Validación 1: Nombre Obligatorio**
+```kotlin
+if (name.isBlank()) {
+    Toast.makeText(context, "El nombre del lugar es obligatorio", Toast.LENGTH_SHORT).show()
+    return@Button
+}
+```
+
+**Validación 2: Descripción Mínima**
+```kotlin
+if (description.length < 10) {
+    Toast.makeText(context, "La descripción debe tener al menos 10 caracteres", Toast.LENGTH_SHORT).show()
+    return@Button
+}
+```
+
+**Validación 3: Dirección Obligatoria**
+```kotlin
+if (address.isBlank()) {
+    Toast.makeText(context, "La dirección es obligatoria", Toast.LENGTH_SHORT).show()
+    return@Button
+}
+```
+
+**Validación 4: Sesión Activa**
+```kotlin
+val currentUserId = sessionManager.getUserId()
+if (currentUserId == null) {
+    Toast.makeText(context, "Debes iniciar sesión para crear un lugar", Toast.LENGTH_LONG).show()
+    return@Button
+}
+```
+
+#### Casos de Uso Habilitados
+
+**Para Usuarios Regulares**:
+1. Crear lugares desde la app
+2. Lugares entran automáticamente en moderación (approved=false)
+3. Sistema vincula lugar con su usuario (ownerId)
+4. Feedback claro sobre estado de moderación
+
+**Para Administradores**:
+1. Pueden ver lugares pendientes (usando PlacesViewModel.getPendingPlaces())
+2. Aprobar/rechazar lugares creados por usuarios
+3. Auditoría completa de creación (ownerId + createdAt)
+
+**Para el Sistema**:
+1. Trazabilidad completa de autoría de lugares
+2. Sistema de moderación funcional
+3. Prevención de spam (validaciones)
+4. Datos mínimos pero completos para funcionalidad básica
+
+#### Datos Temporales/Placeholder
+
+Para mantener la fase 2 simple, algunos campos usan valores placeholder:
+
+**Location (Coordenadas)**:
+```kotlin
+location = Location(0.0, 0.0) // Se actualizará cuando se implemente el mapa
+```
+
+**Images (Imágenes)**:
+```kotlin
+images = listOf("https://via.placeholder.com/300x200?text=Lugar") // Placeholder hasta implementar upload
+```
+
+**Schedules (Horarios)**:
+```kotlin
+schedules = emptyList() // Se implementará en versiones futuras
+```
+
+Estos valores permiten que el sistema funcione completamente mientras se desarrollan features avanzadas.
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Usuario Crea un Restaurante**
+```kotlin
+// Usuario está en CreatePlaceScreen
+
+// 1. Llenar formulario:
+name = "Restaurante El Buen Sabor"
+description = "Comida típica colombiana con ambiente familiar"
+address = "Calle 14 # 15-20, Armenia"
+phone = "3201234567"
+selectedType = PlaceType.RESTAURANT
+
+// 2. Click en "Crear"
+// Sistema valida → Todo OK
+// Sistema verifica sesión → userId = "2" (Daniel)
+
+// 3. Lugar creado:
+Place(
+    id = "550e8400-e29b-41d4-a716-446655440000",
+    title = "Restaurante El Buen Sabor",
+    description = "Comida típica colombiana con ambiente familiar",
+    address = "Calle 14 # 15-20, Armenia",
+    location = Location(0.0, 0.0),
+    images = ["https://via.placeholder.com/300x200?text=Lugar"],
+    phones = ["3201234567"],
+    type = RESTAURANT,
+    schedules = [],
+    approved = false, // ← Pendiente de moderación
+    ownerId = "2", // ← Vinculado a Daniel
+    createdAt = 1696780800000
+)
+
+// 4. Toast: "Lugar creado. Pendiente de aprobación"
+// 5. Navega de regreso automáticamente
+```
+
+**Ejemplo 2: Validación de Sesión Falla**
+```kotlin
+// Usuario no logueado intenta crear lugar
+
+// SessionManager.getUserId() retorna null
+// Sistema previene creación
+
+Toast.makeText(
+    context,
+    "Debes iniciar sesión para crear un lugar",
+    Toast.LENGTH_LONG
+).show()
+
+// No se crea el lugar
+// Usuario permanece en CreatePlaceScreen
+```
+
+**Ejemplo 3: Validación de Descripción Corta**
+```kotlin
+// Usuario llena formulario pero descripción muy corta
+
+name = "Bar La 14"
+description = "Buen bar" // ← Solo 8 caracteres
+address = "Calle 14"
+
+// Click en "Crear"
+// Validación falla
+
+Toast.makeText(
+    context,
+    "La descripción debe tener al menos 10 caracteres",
+    Toast.LENGTH_SHORT
+).show()
+
+// No se crea el lugar
+// Usuario puede corregir
+```
+
+**Ejemplo 4: Administrador Ve Lugar Creado**
+```kotlin
+@Composable
+fun ModerationScreen(placesViewModel: PlacesViewModel) {
+    val pendingPlaces = placesViewModel.getPendingPlaces()
+    
+    // pendingPlaces incluye el lugar recién creado por Daniel
+    // Administrador puede ver:
+    // - Título: "Restaurante El Buen Sabor"
+    // - Propietario: ownerId = "2"
+    // - Fecha: createdAt = timestamp
+    
+    LazyColumn {
+        items(pendingPlaces) { place ->
+            PlaceCard(
+                place = place,
+                onApprove = { 
+                    placesViewModel.approvePlace(place.id, adminId) 
+                },
+                onReject = { reason ->
+                    placesViewModel.rejectPlace(place.id, adminId, reason)
+                }
+            )
+        }
+    }
+}
+```
+
+#### Integración con Sistema de Moderación
+
+El flujo completo desde creación hasta aprobación:
+
+```
+1. Usuario crea lugar
+   ├─> approved = false
+   ├─> ownerId = currentUserId
+   └─> createdAt = timestamp
+
+2. Lugar aparece en PlacesViewModel.places
+   └─> StateFlow notifica
+
+3. Administrador consulta lugares pendientes
+   └─> placesViewModel.getPendingPlaces()
+       └─> Retorna lugar con approved = false
+
+4. Administrador aprueba lugar
+   └─> placesViewModel.approvePlace(placeId, adminId)
+       ├─> approved = true
+       └─> ModerationRecord creado
+
+5. Lugar aparece en listados públicos
+   └─> placesViewModel.getApprovedPlaces()
+       └─> Usuarios regulares pueden verlo
+```
+
+#### Consideraciones de Diseño
+
+**UX Mejorada**:
+- Scroll vertical para pantallas pequeñas
+- Validaciones con mensajes claros
+- Feedback inmediato con Toast
+- Navegación automática tras éxito
+- Indicadores de campos obligatorios (*)
+
+**Seguridad**:
+- Verificación de sesión antes de crear
+- Trim automático de campos de texto
+- Validación de longitud mínima
+- Prevención de lugares anónimos (requiere ownerId)
+
+**Persistencia**:
+- Datos guardados en memoria (PlacesViewModel)
+- StateFlow garantiza sincronización
+- Preparado para integración con backend/BD
+
+**Escalabilidad**:
+- Estructura preparada para agregar más campos
+- Fácil añadir validaciones adicionales
+- Placeholder para features futuras (mapas, fotos)
+
+**Mantenibilidad**:
+- Código documentado con KDoc
+- Separación clara de validaciones
+- Lógica de negocio aislada en onClick
+- Facilita testing unitario
+
+---
+
 ## Flujo de Autenticación
 
 ### Primer Acceso (Sin Sesión)
@@ -1783,6 +2175,139 @@ Resultado Esperado:
 - No hay delay en actualización
 ```
 
+#### Test Case 23: Crear Lugar con Validaciones Exitosas
+```
+Precondiciones: Usuario "2" (Daniel) logueado
+Pasos:
+1. Navegar a CreatePlaceScreen
+2. Llenar formulario:
+   - Nombre: "Café Central"
+   - Descripción: "Excelente café con ambiente acogedor" (>10 chars)
+   - Dirección: "Calle 10 # 12-34"
+   - Teléfono: "3101234567"
+   - Categoría: RESTAURANT
+3. Click en "Crear"
+4. Verificar placesViewModel.places
+
+Resultado Esperado:
+- Toast: "Lugar creado. Pendiente de aprobación"
+- Navega de regreso automáticamente
+- Lugar existe en placesViewModel.places
+- place.ownerId == "2"
+- place.approved == false
+- place.title == "Café Central"
+- place.id != null (UUID generado)
+```
+
+#### Test Case 24: Validación de Nombre Obligatorio
+```
+Precondiciones: Usuario logueado en CreatePlaceScreen
+Pasos:
+1. Dejar campo "Nombre" vacío
+2. Llenar otros campos correctamente
+3. Click en "Crear"
+
+Resultado Esperado:
+- Toast: "El nombre del lugar es obligatorio"
+- No se crea el lugar
+- Permanece en CreatePlaceScreen
+- placesViewModel.places.size no aumenta
+```
+
+#### Test Case 25: Validación de Descripción Mínima
+```
+Precondiciones: Usuario logueado en CreatePlaceScreen
+Pasos:
+1. Llenar nombre: "Bar"
+2. Descripción: "Bueno" (solo 5 caracteres)
+3. Llenar dirección
+4. Click en "Crear"
+
+Resultado Esperado:
+- Toast: "La descripción debe tener al menos 10 caracteres"
+- No se crea el lugar
+- Usuario puede corregir la descripción
+- placesViewModel.places.size no aumenta
+```
+
+#### Test Case 26: Validación de Sesión Activa
+```
+Precondiciones: Usuario SIN login (sesión cerrada)
+Pasos:
+1. Navegar a CreatePlaceScreen (por algún bug hipotético)
+2. Llenar formulario correctamente
+3. Click en "Crear"
+4. sessionManager.getUserId() retorna null
+
+Resultado Esperado:
+- Toast: "Debes iniciar sesión para crear un lugar"
+- No se crea el lugar
+- No hay crash
+- Sistema previene creación sin owner
+```
+
+#### Test Case 27: Verificar Asignación de ownerId
+```
+Precondiciones: Usuario "2" (Daniel) logueado
+Pasos:
+1. Crear lugar "Restaurante Test"
+2. Obtener lugar de placesViewModel.places
+3. Verificar campo ownerId
+
+Resultado Esperado:
+- place.ownerId == "2"
+- place.ownerId != null
+- Lugar vinculado correctamente al usuario
+- Administrador puede ver quién lo creó
+```
+
+#### Test Case 28: Lugar Entra en Moderación Automáticamente
+```
+Precondiciones: Usuario regular crea lugar
+Pasos:
+1. Crear lugar "Bar Test"
+2. Llamar placesViewModel.getPendingPlaces()
+3. Llamar placesViewModel.getApprovedPlaces()
+
+Resultado Esperado:
+- getPendingPlaces() incluye "Bar Test"
+- getApprovedPlaces() NO incluye "Bar Test"
+- place.approved == false
+- Lugar requiere aprobación de administrador
+```
+
+#### Test Case 29: Dropdown de Categorías Funciona
+```
+Precondiciones: Usuario en CreatePlaceScreen
+Pasos:
+1. Click en dropdown de categoría
+2. Verificar opciones disponibles
+3. Seleccionar HOTEL
+4. Verificar selección
+
+Resultado Esperado:
+- Dropdown muestra todos los PlaceType
+- RESTAURANT, BAR, HOTEL, PARK, SHOPPING, OTHER
+- Al seleccionar HOTEL, dropdown se cierra
+- Campo muestra "HOTEL"
+- selectedType == PlaceType.HOTEL
+```
+
+#### Test Case 30: Teléfono es Opcional
+```
+Precondiciones: Usuario logueado en CreatePlaceScreen
+Pasos:
+1. Llenar campos obligatorios correctamente
+2. Dejar campo "Teléfono" vacío
+3. Click en "Crear"
+
+Resultado Esperado:
+- Lugar se crea exitosamente
+- place.phones == emptyList()
+- No muestra error de validación
+- Toast de éxito se muestra
+```
+
 ## Compilación y Ejecución
 
 ### Requisitos
@@ -1910,6 +2435,16 @@ android {
   - Obtener lista de favoritos del usuario (getFavorites)
   - Persistencia en memoria mediante StateFlow
   - Actualización reactiva en UI
+- Formulario completo de creación de lugares:
+  - Validación de campos obligatorios (nombre, descripción, dirección)
+  - Validación de longitud mínima de descripción (10 caracteres)
+  - Verificación de sesión activa antes de crear
+  - Dropdown Material 3 para selección de categoría
+  - Asignación automática de ownerId desde SessionManager
+  - Lugares creados entran en estado approved=false (moderación)
+  - Feedback visual con Toast para validaciones y éxito
+  - Navegación automática tras creación exitosa
+  - Integración completa con PlacesViewModel
 
 ### Funcionalidades Pendientes
 
@@ -1921,6 +2456,9 @@ android {
 - UI para sección "Mis Favoritos"
 - UI para botones de favorito en PlaceDetailScreen
 - Validación de propiedad de lugar antes de permitir respuestas
+- Implementación de mapas para seleccionar ubicación real
+- Sistema de carga de imágenes (reemplazar placeholder)
+- Formulario de horarios de atención
 - Integración con backend/API REST
 - Persistencia de datos con Room Database
 - Funcionalidad de mapas con Google Maps

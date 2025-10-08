@@ -20,6 +20,7 @@ import co.edu.eam.lugaresapp.ui.user.HomeUser
 import co.edu.eam.lugaresapp.ui.admin.HomeAdmin
 import co.edu.eam.lugaresapp.ui.user.screens.EditProfileScreen
 import co.edu.eam.lugaresapp.ui.places.CreatePlaceScreen
+import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
 /**
@@ -67,6 +68,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
      * - Se destruye automáticamente cuando el Composable se destruye
      */
     val usersViewModel: UsersViewModel = viewModel()
+    val placesViewModel: PlacesViewModel = viewModel()
 
     /**
      * INICIALIZACIÓN DEL SESSION MANAGER
@@ -202,7 +204,10 @@ fun AppNavigation(modifier: Modifier = Modifier) {
              * RUTA: CREACIÓN DE LUGAR
              */
             composable(RouteScreen.CreatePlace.route) {
-                CreatePlaceScreen(onNavigateBack = { navController.popBackStack() })
+                CreatePlaceScreen(
+                    placesViewModel = placesViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
         }
     }
