@@ -4,11 +4,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import co.edu.eam.lugaresapp.data.SessionManager
+import co.edu.eam.lugaresapp.model.Role
 import co.edu.eam.lugaresapp.ui.auth.LoginScreen
 import co.edu.eam.lugaresapp.ui.auth.RegisterScreen
 import co.edu.eam.lugaresapp.ui.auth.PasswordRecoverScreen
@@ -63,6 +67,50 @@ fun AppNavigation(modifier: Modifier = Modifier) {
      * - Se destruye automáticamente cuando el Composable se destruye
      */
     val usersViewModel: UsersViewModel = viewModel()
+
+    /**
+     * INICIALIZACIÓN DEL SESSION MANAGER
+     * 
+     * SessionManager maneja la persistencia de sesión usando SharedPreferences.
+     * Permite guardar/leer el userId y mantener al usuario logueado.
+     */
+    val context = LocalContext.current
+    val sessionManager = SessionManager(context)
+
+    /**
+     * AUTO-LOGIN: DETECCIÓN DE SESIÓN ACTIVA
+     * 
+     * LaunchedEffect se ejecuta una sola vez al inicializar la pantalla (Unit como key).
+     * Comprueba si hay un userId guardado en SharedPreferences y, si existe,
+     * navega automáticamente a la pantalla correspondiente según el rol del usuario.
+     * 
+     * FLUJO:
+     * 1. Obtener userId de SessionManager
+     * 2. Si existe, buscar el usuario en el ViewModel
+     * 3. Navegar a HomeAdmin o HomeUser según el rol
+     * 4. Limpiar el backstack para evitar volver al Login con el botón atrás
+     */
+    LaunchedEffect(Unit) {
+        val currentUserId = sessionManager.getUserId()
+        if (currentUserId != null) {
+            val user = usersViewModel.findById(currentUserId)
+            if (user != null) {
+                // Navegar a la pantalla correspondiente según el rol
+                val destination = when (user.role) {
+                    Role.ADMIN -> RouteScreen.HomeAdmin.route
+                    Role.USER -> RouteScreen.HomeUser.route
+                }
+                
+                // Navegar y limpiar el backstack para evitar volver al Login
+                navController.navigate(destination) {
+                    popUpTo(RouteScreen.Login.route) { inclusive = true }
+                }
+            } else {
+                // Si el usuario no existe, limpiar la sesión
+                sessionManager.clear()
+            }
+        }
+    }
 
     /**
      * SUPERFICIE PRINCIPAL CON TEMA
