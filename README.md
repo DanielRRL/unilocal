@@ -3531,6 +3531,599 @@ Resultado Esperado:
 
 ---
 
+###Step 9: Búsqueda y Filtros en PlacesScreen
+
+Se implementó un sistema completo de búsqueda y filtrado de lugares con cálculo de distancia geográfica usando la fórmula de Haversine.
+
+#### Archivos Modificados
+
+**1. PlacesViewModel.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/viewmodel/PlacesViewModel.kt`
+
+Se agregaron funciones para cálculo de distancia y búsqueda avanzada con filtros combinados.
+
+**Cambios Realizados**:
+
+1. **Ubicación Simulada del Usuario**:
+   ```kotlin
+   val defaultUserLocation = Location(1.23, 2.34)
+   ```
+   - Ubicación fija para desarrollo y testing
+   - En producción vendría del GPS o ciudad del usuario
+   - Usada por defecto en searchWithFilters()
+
+2. **Función Haversine - Cálculo de Distancia**:
+   ```kotlin
+   private fun haversine(
+       lat1: Double, lon1: Double, 
+       lat2: Double, lon2: Double
+   ): Double {
+       val earthRadiusKm = 6371.0
+       val dLat = Math.toRadians(lat2 - lat1)
+       val dLon = Math.toRadians(lon2 - lon1)
+       // ... aplicar fórmula
+       return earthRadiusKm * c * 1000 // metros
+   }
+   ```
+   - Implementa fórmula estándar de Haversine
+   - Calcula distancia sobre superficie esférica
+   - Radio de la Tierra: 6371 km
+   - Convierte grados a radianes
+   - Retorna distancia en metros
+
+3. **Filtrar por Distancia**:
+   ```kotlin
+   fun findByDistance(
+       userLat: Double, 
+       userLon: Double, 
+       maxMeters: Double = 5000.0
+   ): List<Place> {
+       return _places.value
+           .map { place -> Pair(place, haversine(...)) }
+           .filter { (_, distance) -> distance <= maxMeters }
+           .sortedBy { (_, distance) -> distance }
+           .map { (place, _) -> place }
+   }
+   ```
+   - Calcula distancia para cada lugar
+   - Filtra por radio máximo
+   - Ordena por distancia ascendente (más cercanos primero)
+   - Default: 5000 metros (5 km)
+
+4. **Búsqueda Combinada con Filtros**:
+   ```kotlin
+   fun searchWithFilters(
+       searchText: String = "",
+       selectedType: PlaceType? = null,
+       userLat: Double = defaultUserLocation.latitude,
+       userLon: Double = defaultUserLocation.longitude,
+       maxDistance: Double = 0.0
+   ): List<Place>
+   ```
+   - Orden de aplicación: aprobados → nombre → tipo → distancia
+   - Búsqueda case-insensitive en título y descripción
+   - Filtro de tipo opcional (null = todos)
+   - Filtro de distancia opcional (0 = sin filtro)
+   - Retorna solo lugares aprobados
+
+**Características de la Implementación**:
+- Funciones puras sin efectos secundarios
+- Eficiencia: un solo recorrido con map/filter/sort
+- Flexibilidad: cada filtro es opcional
+- Precisión: Haversine es estándar para distancias cortas
+
+---
+
+**2. PlacesScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/user/screens/PlacesScreen.kt`
+
+Se transformó de una lista simple a una interfaz completa con búsqueda y filtros múltiples.
+
+**Cambios Realizados**:
+
+1. **Estados de Filtros**:
+   ```kotlin
+   var searchText by remember { mutableStateOf("") }
+   var selectedType by remember { mutableStateOf<PlaceType?>(null) }
+   var maxDistance by remember { mutableStateOf(5000f) }
+   var showFilters by remember { mutableStateOf(false) }
+   ```
+
+2. **Aplicación Reactiva de Filtros**:
+   ```kotlin
+   val filteredPlaces = remember(searchText, selectedType, maxDistance) {
+       placesViewModel.searchWithFilters(
+           searchText = searchText,
+           selectedType = selectedType,
+           maxDistance = maxDistance.toDouble()
+       )
+   }
+   ```
+   - Se recalcula automáticamente cuando cambia cualquier filtro
+   - `remember` optimiza re-composiciones
+
+3. **Barra de Búsqueda**:
+   - OutlinedTextField con icono de búsqueda
+   - Botón clear cuando hay texto
+   - Placeholder: "Buscar lugares..."
+   - SingleLine para mejor UX
+
+4. **Panel de Filtros Expandible**:
+   ```kotlin
+   TextButton(onClick = { showFilters = !showFilters }) {
+       Text(if (showFilters) "Ocultar filtros" else "Mostrar filtros")
+   }
+   ```
+   - Botón toggle para mostrar/ocultar
+   - Card con elevation cuando está visible
+   - Ahorra espacio en pantalla
+
+5. **Filtro de Tipo con Chips**:
+   ```kotlin
+   FilterChip(selected = selectedType == null, label = { Text("Todos") })
+   PlaceType.values().forEach { type ->
+       FilterChip(selected = selectedType == type, label = { Text(type.name) })
+   }
+   ```
+   - Chip "Todos" para limpiar selección
+   - Un chip por cada PlaceType
+   - Estado selected visual claro
+   - Toggle: seleccionar/deseleccionar
+
+6. **Slider de Distancia**:
+   ```kotlin
+   Slider(
+       value = maxDistance,
+       onValueChange = { maxDistance = it },
+       valueRange = 0f..10000f,
+       steps = 19 // 500m increments
+   )
+   Text("Distancia máxima: ${(maxDistance / 1000).toInt()} km")
+   ```
+   - Rango: 0-10 km
+   - 20 pasos (500m cada uno)
+   - Etiquetas en extremos: "0 km" y "10 km"
+   - Muestra valor actual en km
+
+7. **Botón Limpiar Filtros**:
+   ```kotlin
+   Button(onClick = {
+       searchText = ""
+       selectedType = null
+       maxDistance = 5000f
+   })
+   ```
+   - Resetea todos los filtros a valores por defecto
+   - Feedback inmediato
+
+8. **Contador de Resultados**:
+   ```kotlin
+   Text("${filteredPlaces.size} lugares encontrados")
+   ```
+   - Muestra número de lugares tras aplicar filtros
+   - Ayuda a entender efectividad de búsqueda
+
+9. **Estado Vacío**:
+   ```kotlin
+   if (filteredPlaces.isEmpty()) {
+       Box(contentAlignment = Center) {
+           Text("No se encontraron lugares")
+           Text("Intenta ajustar los filtros")
+       }
+   }
+   ```
+   - Mensaje cuando no hay resultados
+   - Sugerencia para ajustar filtros
+
+10. **Lista de Resultados Mejorada**:
+    - ListItem con imagen, título, descripción
+    - Muestra tipo de lugar como badge
+    - Clickable para ir a detalle
+    - Espaciado de 8dp entre items
+    - ContentPadding para mejor layout
+
+**Diseño Visual**:
+- Material Design 3 components
+- FilterChips con estado selected
+- Slider con etiquetas informativas
+- Card elevation para panel de filtros
+- Iconos descriptivos (Search, Clear)
+- Colores de tema aplicados
+
+---
+
+#### Funcionalidades Implementadas
+
+1. **Cálculo de Distancia Geográfica**:
+   - ✅ Fórmula de Haversine implementada
+   - ✅ Conversión de grados a radianes
+   - ✅ Radio de la Tierra: 6371 km
+   - ✅ Resultado en metros
+   - ✅ Precisión para distancias cortas (<1000km)
+
+2. **Búsqueda por Nombre**:
+   - ✅ Case-insensitive (ignoreCase = true)
+   - ✅ Busca en título y descripción
+   - ✅ Coincidencias parciales (contains)
+   - ✅ Icono de búsqueda en barra
+   - ✅ Botón clear visible con texto
+
+3. **Filtro por Tipo de Lugar**:
+   - ✅ FilterChips para cada PlaceType
+   - ✅ Chip "Todos" para limpiar
+   - ✅ Estado selected visual claro
+   - ✅ Toggle funcionando correctamente
+
+4. **Filtro por Distancia**:
+   - ✅ Slider de 0 a 10 km
+   - ✅ Pasos de 500 metros
+   - ✅ Etiquetas min/max
+   - ✅ Muestra valor actual en km
+   - ✅ Ordenamiento por distancia
+
+5. **Combinación de Filtros**:
+   - ✅ Todos los filtros pueden combinarse
+   - ✅ Aplicación en orden lógico
+   - ✅ Solo muestra lugares aprobados
+   - ✅ Reactividad automática
+
+6. **UX/UI**:
+   - ✅ Panel de filtros colapsable
+   - ✅ Botón limpiar filtros
+   - ✅ Contador de resultados
+   - ✅ Mensaje cuando no hay resultados
+   - ✅ Design responsivo
+
+---
+
+#### Ejemplos de Uso
+
+**Ejemplo 1: Búsqueda Simple por Nombre**
+
+1. Usuario abre PlacesScreen
+2. Escribe "paisa" en barra de búsqueda
+3. searchWithFilters() se ejecuta con searchText="paisa"
+4. Filtra lugares donde título o descripción contiene "paisa"
+5. Muestra "1 lugares encontrados"
+6. Lista muestra "Restaurante El paisa"
+
+**Ejemplo 2: Filtrar por Tipo**
+
+1. Usuario hace clic en "Mostrar filtros"
+2. Panel de filtros se expande
+3. Usuario hace clic en chip "BAR"
+4. selectedType = PlaceType.BAR
+5. searchWithFilters() filtra por type == BAR
+6. Muestra "5 lugares encontrados"
+7. Lista muestra solo bares
+
+**Ejemplo 3: Filtrar por Distancia**
+
+1. Usuario mueve slider a 2 km
+2. maxDistance = 2000f
+3. searchWithFilters() llama findByDistance(userLat, userLon, 2000.0)
+4. Para cada lugar:
+   - Calcula distancia con haversine()
+   - Filtra si distancia <= 2000m
+5. Ordena por distancia ascendente
+6. Muestra lugares dentro de 2km
+7. Más cercanos aparecen primero
+
+**Ejemplo 4: Combinación de Filtros**
+
+1. Usuario busca "bar" en barra
+2. Usuario selecciona tipo "BAR"
+3. Usuario ajusta distancia a 5 km
+4. searchWithFilters() aplica los 3 filtros:
+   - Filtra por approved=true
+   - Filtra por "bar" en título/descripción
+   - Filtra por type=BAR
+   - Filtra por distancia <= 5000m
+5. Muestra solo bares con "bar" en el nombre dentro de 5km
+6. Contador muestra "3 lugares encontrados"
+
+**Ejemplo 5: Limpiar Todos los Filtros**
+
+1. Usuario tiene varios filtros aplicados
+2. Usuario hace clic en "Limpiar filtros"
+3. searchText = ""
+4. selectedType = null
+5. maxDistance = 5000f
+6. searchWithFilters() retorna todos los lugares aprobados
+7. Lista se actualiza con todos los lugares
+
+**Ejemplo 6: Sin Resultados**
+
+1. Usuario busca "pizza"
+2. No hay lugares con "pizza" en título/descripción
+3. filteredPlaces.isEmpty() == true
+4. Se renderiza Box con mensajes:
+   - "No se encontraron lugares"
+   - "Intenta ajustar los filtros"
+5. No se muestra LazyColumn vacía
+
+---
+
+#### Casos de Prueba
+
+#### Test Case 59: Búsqueda por Nombre Case-Insensitive
+```
+Precondiciones: PlacesViewModel tiene "Restaurante El paisa" (approved=true)
+Pasos:
+1. Abrir PlacesScreen
+2. Escribir "PAISA" en barra de búsqueda
+3. Verificar resultados
+
+Resultado Esperado:
+- searchWithFilters(searchText="PAISA") se ejecuta
+- Filtra con ignoreCase=true
+- Encuentra "Restaurante El paisa"
+- Muestra "1 lugares encontrados"
+- Lista muestra el restaurante
+```
+
+#### Test Case 60: Búsqueda en Descripción
+```
+Precondiciones: Lugar con description="El mejor restaurante paisa"
+Pasos:
+1. Buscar "mejor"
+2. Verificar resultados
+
+Resultado Esperado:
+- Busca en título Y descripción
+- Encuentra lugar por descripción
+- Muestra en lista de resultados
+```
+
+#### Test Case 61: Filtro por Tipo de Lugar
+```
+Precondiciones: 1 restaurante, 5 bares (todos approved=true)
+Pasos:
+1. Mostrar filtros
+2. Hacer clic en chip "BAR"
+3. Verificar resultados
+
+Resultado Esperado:
+- selectedType = PlaceType.BAR
+- searchWithFilters(selectedType=BAR) ejecuta
+- Filtra donde place.type == BAR
+- Muestra "5 lugares encontrados"
+- Solo bares en lista
+```
+
+#### Test Case 62: Chip "Todos" Limpia Tipo
+```
+Precondiciones: selectedType = PlaceType.BAR
+Pasos:
+1. Hacer clic en chip "Todos"
+2. Verificar estado
+
+Resultado Esperado:
+- selectedType = null
+- searchWithFilters(selectedType=null) ejecuta
+- No aplica filtro de tipo
+- Muestra todos los lugares aprobados
+```
+
+#### Test Case 63: Cálculo de Distancia Haversine
+```
+Precondiciones: 
+- userLocation = Location(1.23, 2.34)
+- placeLocation = Location(1.24, 2.35)
+Pasos:
+1. Llamar haversine(1.23, 2.34, 1.24, 2.35)
+2. Verificar resultado
+
+Resultado Esperado:
+- Convierte grados a radianes correctamente
+- Aplica fórmula: a = sin²(Δlat/2) + cos(lat1)*cos(lat2)*sin²(Δlon/2)
+- Calcula c = 2 * atan2(√a, √(1−a))
+- Retorna distancia en metros
+- Resultado ≈ 1570 metros (aproximado)
+```
+
+#### Test Case 64: Filtro por Distancia
+```
+Precondiciones: 
+- Lugar 1 a 1000m del usuario
+- Lugar 2 a 3000m del usuario
+- Lugar 3 a 6000m del usuario
+- maxDistance = 5000f
+Pasos:
+1. Aplicar filtro de distancia
+2. Verificar resultados
+
+Resultado Esperado:
+- findByDistance(userLat, userLon, 5000.0) ejecuta
+- Calcula distancia para cada lugar con haversine()
+- Filtra lugares con distancia <= 5000m
+- Muestra Lugar 1 y Lugar 2
+- No muestra Lugar 3 (6000m > 5000m)
+- Lugares ordenados por distancia: Lugar 1 primero
+```
+
+#### Test Case 65: Slider Cambia Distancia
+```
+Precondiciones: maxDistance = 5000f
+Pasos:
+1. Mover slider a la mitad
+2. Verificar valor
+
+Resultado Esperado:
+- maxDistance actualizado a 5000f
+- Text muestra "Distancia máxima: 5 km"
+- searchWithFilters() se re-ejecuta automáticamente
+- remember(maxDistance) detecta cambio
+- Lista se actualiza con nuevos resultados
+```
+
+#### Test Case 66: Combinación de 3 Filtros
+```
+Precondiciones: 
+- 10 lugares aprobados
+- 5 bares
+- 3 bares con "test" en nombre
+- 2 de esos bares dentro de 5km
+Pasos:
+1. Buscar "test"
+2. Seleccionar tipo "BAR"
+3. Ajustar distancia a 5 km
+4. Verificar resultados
+
+Resultado Esperado:
+- searchWithFilters(searchText="test", selectedType=BAR, maxDistance=5000) ejecuta
+- Aplica filtros en orden: aprobados → nombre → tipo → distancia
+- Muestra "2 lugares encontrados"
+- Solo muestra 2 bares con "test" dentro de 5km
+```
+
+#### Test Case 67: Botón Limpiar Filtros
+```
+Precondiciones: 
+- searchText = "bar"
+- selectedType = PlaceType.BAR
+- maxDistance = 2000f
+Pasos:
+1. Hacer clic en "Limpiar filtros"
+2. Verificar estado
+
+Resultado Esperado:
+- searchText se resetea a ""
+- selectedType se resetea a null
+- maxDistance se resetea a 5000f
+- searchWithFilters() ejecuta sin filtros
+- Muestra todos los lugares aprobados
+- TextField vacío
+- Chip "Todos" selected
+- Slider en 5 km
+```
+
+#### Test Case 68: Panel de Filtros Toggle
+```
+Precondiciones: showFilters = false
+Pasos:
+1. Hacer clic en "Mostrar filtros"
+2. Verificar UI
+
+Resultado Esperado:
+- showFilters = true
+- Card con filtros se renderiza
+- Muestra chips de tipo
+- Muestra slider de distancia
+- Botón cambia a "Ocultar filtros"
+
+Pasos adicionales:
+3. Hacer clic en "Ocultar filtros"
+
+Resultado Esperado:
+- showFilters = false
+- Card desaparece
+- Botón vuelve a "Mostrar filtros"
+- Filtros siguen aplicados (no se resetean)
+```
+
+#### Test Case 69: Contador de Resultados
+```
+Precondiciones: 
+- Búsqueda retorna 3 lugares
+Pasos:
+1. Aplicar filtros
+2. Verificar contador
+
+Resultado Esperado:
+- Text muestra "${filteredPlaces.size} lugares encontrados"
+- Muestra "3 lugares encontrados"
+- Se actualiza automáticamente al cambiar filtros
+- Singular "1 lugar encontrado" si solo hay 1
+```
+
+#### Test Case 70: Estado Vacío
+```
+Precondiciones: Filtros aplicados no coinciden con ningún lugar
+Pasos:
+1. Buscar texto que no existe
+2. Verificar UI
+
+Resultado Esperado:
+- filteredPlaces.isEmpty() == true
+- No se renderiza LazyColumn
+- Se muestra Box centrado
+- Mensaje: "No se encontraron lugares"
+- Sugerencia: "Intenta ajustar los filtros"
+- Color: onSurfaceVariant
+```
+
+#### Test Case 71: Reactividad de remember()
+```
+Precondiciones: searchText = "bar"
+Pasos:
+1. Cambiar searchText a "restaurant"
+2. Verificar re-composición
+
+Resultado Esperado:
+- remember(searchText, selectedType, maxDistance) detecta cambio
+- searchWithFilters() se ejecuta automáticamente
+- filteredPlaces se actualiza
+- LazyColumn se re-renderiza con nuevos items
+- No hay lag ni retraso visible
+```
+
+#### Test Case 72: Lugares No Aprobados Ocultos
+```
+Precondiciones: 
+- Lugar 1: approved=true
+- Lugar 2: approved=false
+Pasos:
+1. Abrir PlacesScreen sin filtros
+2. Verificar lista
+
+Resultado Esperado:
+- searchWithFilters() filtra por approved=true primero
+- Solo muestra Lugar 1
+- Lugar 2 no aparece aunque coincida con otros filtros
+- Usuarios regulares no ven lugares pendientes
+```
+
+#### Test Case 73: Ordenamiento por Distancia
+```
+Precondiciones:
+- Lugar A a 500m
+- Lugar B a 200m
+- Lugar C a 800m
+- maxDistance = 10000m (todos incluidos)
+Pasos:
+1. Aplicar filtro de distancia
+2. Verificar orden
+
+Resultado Esperado:
+- findByDistance() ordena con sortedBy { distance }
+- Lista muestra en orden:
+  1. Lugar B (200m) - primero
+  2. Lugar A (500m) - segundo
+  3. Lugar C (800m) - tercero
+- Más cercanos siempre primero
+```
+
+#### Test Case 74: Clear Button en Búsqueda
+```
+Precondiciones: searchText = "test"
+Pasos:
+1. Verificar trailing icon visible
+2. Hacer clic en IconButton
+3. Verificar estado
+
+Resultado Esperado:
+- IconButton con Icons.Filled.Clear visible
+- Al hacer clic: searchText = ""
+- TextField vacío
+- searchWithFilters() se ejecuta sin texto
+- Clear button desaparece (solo visible si hay texto)
+```
+
+---
+
 ## Compilación y Ejecución
 
 ### Requisitos

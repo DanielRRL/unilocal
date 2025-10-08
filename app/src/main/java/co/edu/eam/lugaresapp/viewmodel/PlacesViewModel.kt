@@ -52,6 +52,14 @@ class PlacesViewModel: ViewModel() {
      */
     val moderationRecords: StateFlow<List<ModerationRecord>> = _moderationRecords.asStateFlow()
 
+    /**
+     * UBICACIÓN SIMULADA DEL USUARIO
+     * 
+     * En producción, esta ubicación vendría del GPS o de la ciudad del usuario.
+     * Para desarrollo, usamos una ubicación fija cercana a los lugares de prueba.
+     */
+    val defaultUserLocation = Location(1.23, 2.34)
+
     init {
         loadPlaces()
     }
@@ -335,4 +343,131 @@ class PlacesViewModel: ViewModel() {
         return _places.value.filter { it.approved }
     }
 
+    // ==================== CÁLCULO DE DISTANCIA ====================
+
+    /**
+     * CALCULAR DISTANCIA HAVERSINE
+     * 
+     * Calcula la distancia entre dos puntos geográficos usando la fórmula de Haversine.
+     * Esta es la fórmula estándar para calcular distancias sobre la superficie de una esfera.
+     * 
+     * FÓRMULA HAVERSINE:
+     * a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
+     * c = 2 * atan2(√a, √(1−a))
+     * d = R * c (donde R = radio de la Tierra)
+     * 
+     * @param lat1 Latitud del primer punto en grados
+     * @param lon1 Longitud del primer punto en grados
+     * @param lat2 Latitud del segundo punto en grados
+     * @param lon2 Longitud del segundo punto en grados
+     * @return Distancia en metros entre los dos puntos
+     */
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val earthRadiusKm = 6371.0 // Radio de la Tierra en kilómetros
+        
+        // Convertir grados a radianes
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val lat1Rad = Math.toRadians(lat1)
+        val lat2Rad = Math.toRadians(lat2)
+        
+        // Aplicar fórmula de Haversine
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.sin(dLon / 2) * Math.sin(dLon / 2) *
+                Math.cos(lat1Rad) * Math.cos(lat2Rad)
+        
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        
+        // Retornar distancia en metros
+        return earthRadiusKm * c * 1000
+    }
+
+    /**
+     * FILTRAR LUGARES POR DISTANCIA
+     * 
+     * Retorna lugares que están dentro del radio especificado desde la ubicación del usuario.
+     * Útil para búsquedas del tipo "lugares cerca de mí".
+     * 
+     * ALGORITMO:
+     * 1. Para cada lugar, calcular distancia usando Haversine
+     * 2. Filtrar lugares con distancia <= maxMeters
+     * 3. Ordenar por distancia ascendente (más cercanos primero)
+     * 
+     * @param userLat Latitud del usuario
+     * @param userLon Longitud del usuario
+     * @param maxMeters Radio máximo en metros (por defecto 5000m = 5km)
+     * @return Lista de lugares dentro del radio, ordenados por distancia
+     */
+    fun findByDistance(
+        userLat: Double, 
+        userLon: Double, 
+        maxMeters: Double = 5000.0
+    ): List<Place> {
+        return _places.value
+            .map { place -> 
+                val distance = haversine(userLat, userLon, place.location.latitude, place.location.longitude)
+                Pair(place, distance)
+            }
+            .filter { (_, distance) -> distance <= maxMeters }
+            .sortedBy { (_, distance) -> distance }
+            .map { (place, _) -> place }
+    }
+
+    /**
+     * BÚSQUEDA COMBINADA CON FILTROS
+     * 
+     * Aplica múltiples filtros de forma combinada para búsquedas avanzadas.
+     * 
+     * ORDEN DE APLICACIÓN:
+     * 1. Filtro de aprobación (solo aprobados)
+     * 2. Filtro de nombre (si searchText no está vacío)
+     * 3. Filtro de tipo (si selectedType no es null)
+     * 4. Filtro de distancia (si maxDistance > 0)
+     * 
+     * @param searchText Texto para buscar en el nombre (case-insensitive)
+     * @param selectedType Tipo de lugar a filtrar (null = todos los tipos)
+     * @param userLat Latitud del usuario
+     * @param userLon Longitud del usuario
+     * @param maxDistance Distancia máxima en metros (0 = sin filtro de distancia)
+     * @return Lista de lugares que cumplen todos los filtros activos
+     */
+    fun searchWithFilters(
+        searchText: String = "",
+        selectedType: PlaceType? = null,
+        userLat: Double = defaultUserLocation.latitude,
+        userLon: Double = defaultUserLocation.longitude,
+        maxDistance: Double = 0.0
+    ): List<Place> {
+        var result = _places.value.filter { it.approved } // Solo lugares aprobados
+        
+        // Filtrar por nombre (case-insensitive)
+        if (searchText.isNotBlank()) {
+            result = result.filter { 
+                it.title.contains(searchText, ignoreCase = true) ||
+                it.description.contains(searchText, ignoreCase = true)
+            }
+        }
+        
+        // Filtrar por tipo
+        if (selectedType != null) {
+            result = result.filter { it.type == selectedType }
+        }
+        
+        // Filtrar por distancia
+        if (maxDistance > 0) {
+            result = result
+                .map { place -> 
+                    val distance = haversine(userLat, userLon, place.location.latitude, place.location.longitude)
+                    Pair(place, distance)
+                }
+                .filter { (_, distance) -> distance <= maxDistance }
+                .sortedBy { (_, distance) -> distance }
+                .map { (place, _) -> place }
+        }
+        
+        return result
+    }
+
 }
+
+
