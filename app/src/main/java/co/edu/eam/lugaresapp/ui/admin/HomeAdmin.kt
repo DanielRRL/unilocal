@@ -12,9 +12,25 @@ import androidx.navigation.compose.rememberNavController
 import co.edu.eam.lugaresapp.R
 import co.edu.eam.lugaresapp.ui.admin.bottombar.BottomBarAdmin
 import co.edu.eam.lugaresapp.ui.admin.nav.ContentAdmin
+import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
+/**
+ * HOME DEL ADMINISTRADOR
+ * 
+ * Pantalla principal del módulo de administración que contiene:
+ * - TopBar con título
+ * - BottomBar con navegación entre secciones
+ * - ContentAdmin con las pantallas de moderación e historial
+ * 
+ * @param placesViewModel ViewModel compartido de lugares
+ * @param usersViewModel ViewModel compartido de usuarios
+ */
 @Composable
-fun HomeAdmin(){
+fun HomeAdmin(
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel
+){
 
     val navController = rememberNavController()
 
@@ -31,7 +47,9 @@ fun HomeAdmin(){
     ) { padding ->
         ContentAdmin(
             navController = navController,
-            padding = padding
+            padding = padding,
+            placesViewModel = placesViewModel,
+            usersViewModel = usersViewModel
         )
     }
 }

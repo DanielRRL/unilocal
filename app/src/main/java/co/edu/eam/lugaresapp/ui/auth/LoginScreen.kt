@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import co.edu.eam.lugaresapp.R
+import co.edu.eam.lugaresapp.data.SessionManager
 import co.edu.eam.lugaresapp.ui.components.InputText
 import co.edu.eam.lugaresapp.ui.navigation.RouteScreen
 import co.edu.eam.lugaresapp.ui.theme.UniLocalButton
@@ -56,6 +57,15 @@ fun LoginScreen(
     navController: NavController,
     usersViewModel: UsersViewModel
 ) {
+    /**
+     * INICIALIZACIÓN DE SESSION MANAGER
+     * 
+     * SessionManager maneja la persistencia de sesión con SharedPreferences.
+     * Se inicializa aquí para poder guardar el userId después del login exitoso.
+     */
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+    
     /**
      * ESTADO LOCAL DE LA PANTALLA
      * 
@@ -241,10 +251,24 @@ fun LoginScreen(
                             
                             val loginResult = usersViewModel.login(email, password)
                             if (loginResult != null) {
-                                // Login exitoso
-                                when (loginResult.role.name) {
-                                    "ADMIN" -> navController.navigate(RouteScreen.HomeAdmin.route)
-                                    "USER" -> navController.navigate(RouteScreen.HomeUser.route)
+                                /**
+                                 * LOGIN EXITOSO
+                                 * 
+                                 * 1. Guardar el userId en SessionManager (SharedPreferences)
+                                 *    Esto permite el auto-login en futuros inicios de la app
+                                 * 2. Navegar a la pantalla correspondiente según el rol
+                                 * 3. Limpiar el backstack para evitar volver al Login con botón atrás
+                                 */
+                                sessionManager.saveUserId(loginResult.id)
+                                
+                                val destination = when (loginResult.role.name) {
+                                    "ADMIN" -> RouteScreen.HomeAdmin.route
+                                    "USER" -> RouteScreen.HomeUser.route
+                                    else -> RouteScreen.HomeUser.route
+                                }
+                                
+                                navController.navigate(destination) {
+                                    popUpTo(RouteScreen.Login.route) { inclusive = true }
                                 }
                             } else {
                                 errorMessage = "Email o contraseña incorrectos"

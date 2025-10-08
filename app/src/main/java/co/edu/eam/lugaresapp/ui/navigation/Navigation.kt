@@ -21,6 +21,7 @@ import co.edu.eam.lugaresapp.ui.admin.HomeAdmin
 import co.edu.eam.lugaresapp.ui.user.screens.EditProfileScreen
 import co.edu.eam.lugaresapp.ui.places.CreatePlaceScreen
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
 /**
@@ -59,16 +60,21 @@ fun AppNavigation(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     
     /**
-     * INICIALIZACIÓN DEL VIEWMODEL
+     * INICIALIZACIÓN DE VIEWMODELS COMPARTIDOS
      * 
      * viewModel() es una función de Compose que:
      * - Crea una instancia del ViewModel si no existe
      * - Reutiliza la instancia existente en recomposiciones
      * - Mantiene el ViewModel vivo durante toda la navegación
      * - Se destruye automáticamente cuando el Composable se destruye
+     * 
+     * IMPORTANTE: Estos ViewModels se crean UNA SOLA VEZ en el scope de Navigation
+     * y se comparten entre TODAS las pantallas que los necesiten. Esto garantiza
+     * que el estado sea consistente en toda la aplicación.
      */
     val usersViewModel: UsersViewModel = viewModel()
     val placesViewModel: PlacesViewModel = viewModel()
+    val reviewsViewModel: RewiewsViewModel = viewModel()
 
     /**
      * INICIALIZACIÓN DEL SESSION MANAGER
@@ -148,6 +154,9 @@ fun AppNavigation(modifier: Modifier = Modifier) {
              * 
              * composable() define una ruta navegable.
              * Cada llamada a composable() es como un "case" en un switch.
+             * 
+             * Se pasa usersViewModel para autenticación y sessionManager será
+             * usado dentro de LoginScreen para guardar la sesión.
              */
             composable(RouteScreen.Login.route) {
                 LoginScreen(
@@ -178,16 +187,31 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
             /**
              * RUTA: DASHBOARD DE USUARIO
+             * 
+             * HomeUser maneja su propia navegación interna a través de ContentUser.
+             * Los ViewModels se pasan desde aquí para ser compartidos entre todas
+             * las pantallas del módulo de usuario (Places, PlaceDetail, Profile, etc.)
              */
             composable(RouteScreen.HomeUser.route) {
-                HomeUser()
+                HomeUser(
+                    placesViewModel = placesViewModel,
+                    reviewsViewModel = reviewsViewModel,
+                    usersViewModel = usersViewModel
+                )
             }
 
             /**
              * RUTA: DASHBOARD DE ADMINISTRADOR
+             * 
+             * HomeAdmin maneja su propia navegación interna a través de ContentAdmin.
+             * Los ViewModels se pasan para gestionar lugares pendientes, historial
+             * de moderación y otras funciones administrativas.
              */
             composable(RouteScreen.HomeAdmin.route) {
-                HomeAdmin()
+                HomeAdmin(
+                    placesViewModel = placesViewModel,
+                    usersViewModel = usersViewModel
+                )
             }
 
             /**
@@ -202,10 +226,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
             /**
              * RUTA: CREACIÓN DE LUGAR
+             * 
+             * Se pasa placesViewModel para que el lugar creado se agregue al estado
+             * compartido y sea visible inmediatamente en otras pantallas.
              */
             composable(RouteScreen.CreatePlace.route) {
                 CreatePlaceScreen(
                     placesViewModel = placesViewModel,
+                    usersViewModel = usersViewModel,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

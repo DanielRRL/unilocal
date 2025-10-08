@@ -21,9 +21,28 @@ import co.edu.eam.lugaresapp.R
 import co.edu.eam.lugaresapp.ui.user.bottombar.BottomBarUser
 import co.edu.eam.lugaresapp.ui.user.nav.ContentUser
 import co.edu.eam.lugaresapp.ui.user.nav.UserScreen
+import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
+import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
+/**
+ * HOME DEL USUARIO
+ * 
+ * Pantalla principal del módulo de usuario que contiene:
+ * - TopBar con título dinámico
+ * - BottomBar con navegación entre secciones
+ * - ContentUser con las pantallas internas
+ * 
+ * @param placesViewModel ViewModel compartido de lugares
+ * @param reviewsViewModel ViewModel compartido de reseñas
+ * @param usersViewModel ViewModel compartido de usuarios
+ */
 @Composable
-fun HomeUser(){
+fun HomeUser(
+    placesViewModel: PlacesViewModel,
+    reviewsViewModel: RewiewsViewModel,
+    usersViewModel: UsersViewModel
+){
 
     val navController = rememberNavController()
     var showTopBar by remember { mutableStateOf(true) }
@@ -54,7 +73,10 @@ fun HomeUser(){
     ) { padding ->
         ContentUser(
             navController = navController,
-            padding = padding
+            padding = padding,
+            placesViewModel = placesViewModel,
+            reviewsViewModel = reviewsViewModel,
+            usersViewModel = usersViewModel
         )
     }
 

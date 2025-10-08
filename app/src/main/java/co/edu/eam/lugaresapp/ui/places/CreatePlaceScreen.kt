@@ -18,6 +18,7 @@ import co.edu.eam.lugaresapp.model.Place
 import co.edu.eam.lugaresapp.model.PlaceType
 import co.edu.eam.lugaresapp.ui.components.InputText
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 import java.util.UUID
 
 /**
@@ -39,12 +40,14 @@ import java.util.UUID
  * 4. Navega de regreso tras creación exitosa
  * 
  * @param placesViewModel ViewModel para gestión de lugares
+ * @param usersViewModel ViewModel de usuarios (disponible para futuras validaciones)
  * @param onNavigateBack Callback de navegación hacia atrás
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatePlaceScreen(
     placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel,
     onNavigateBack: () -> Unit
 ) {
     // Estados del formulario

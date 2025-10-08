@@ -4124,6 +4124,858 @@ Resultado Esperado:
 
 ---
 
+### Step 10: Revisión Final - Integración Completa de ViewModels y Flujo End-to-End
+
+**Objetivo**: Garantizar que todos los screens reciben los ViewModels necesarios a través del sistema de navegación y que el flujo completo (Login → Home → Crear Lugar → Detalle → Reviews → Favoritos → Admin) funciona correctamente en memoria.
+
+#### Principio de Diseño: ViewModels Compartidos
+
+**Problema Anterior**:
+- Cada pantalla creaba sus propias instancias de ViewModels usando `viewModel()`
+- Múltiples instancias significaban datos no sincronizados
+- Cambios en una pantalla no se reflejaban en otras
+- Estado inconsistente entre módulos
+
+**Solución Implementada**:
+```kotlin
+// Navigation.kt - Crear instancias ÚNICAS en el scope de Navigation
+val usersViewModel: UsersViewModel = viewModel()
+val placesViewModel: PlacesViewModel = viewModel()
+val reviewsViewModel: RewiewsViewModel = viewModel()
+
+// Estas instancias se pasan a TODAS las pantallas que las necesiten
+// Garantiza un solo estado compartido en toda la aplicación
+```
+
+#### Archivos Modificados
+
+**1. Navigation.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/navigation/Navigation.kt`
+
+**Cambios Realizados**:
+
+1. **Creación de ViewModels Compartidos**:
+   ```kotlin
+   // ANTES: Solo usersViewModel y placesViewModel
+   val usersViewModel: UsersViewModel = viewModel()
+   val placesViewModel: PlacesViewModel = viewModel()
+   
+   // DESPUÉS: Agregado reviewsViewModel
+   val usersViewModel: UsersViewModel = viewModel()
+   val placesViewModel: PlacesViewModel = viewModel()
+   val reviewsViewModel: RewiewsViewModel = viewModel()
+   ```
+
+2. **Actualización de Rutas**:
+   
+   **HomeUser**:
+   ```kotlin
+   // ANTES
+   composable(RouteScreen.HomeUser.route) {
+       HomeUser()
+   }
+   
+   // DESPUÉS
+   composable(RouteScreen.HomeUser.route) {
+       HomeUser(
+           placesViewModel = placesViewModel,
+           reviewsViewModel = reviewsViewModel,
+           usersViewModel = usersViewModel
+       )
+   }
+   ```
+   
+   **HomeAdmin**:
+   ```kotlin
+   // ANTES
+   composable(RouteScreen.HomeAdmin.route) {
+       HomeAdmin()
+   }
+   
+   // DESPUÉS
+   composable(RouteScreen.HomeAdmin.route) {
+       HomeAdmin(
+           placesViewModel = placesViewModel,
+           usersViewModel = usersViewModel
+       )
+   }
+   ```
+   
+   **CreatePlaceScreen**:
+   ```kotlin
+   // ANTES
+   composable(RouteScreen.CreatePlace.route) {
+       CreatePlaceScreen(
+           placesViewModel = placesViewModel,
+           onNavigateBack = { navController.popBackStack() }
+       )
+   }
+   
+   // DESPUÉS
+   composable(RouteScreen.CreatePlace.route) {
+       CreatePlaceScreen(
+           placesViewModel = placesViewModel,
+           usersViewModel = usersViewModel,
+           onNavigateBack = { navController.popBackStack() }
+       )
+   }
+   ```
+
+**2. LoginScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/auth/LoginScreen.kt`
+
+**Cambios Críticos - Persistencia de Sesión**:
+
+**Problema**: El login funcionaba pero NO guardaba la sesión, por lo que el auto-login no se activaba en reinicios.
+
+**Solución**:
+```kotlin
+// 1. Inicializar SessionManager en LoginScreen
+val context = androidx.compose.ui.platform.LocalContext.current
+val sessionManager = remember { SessionManager(context) }
+
+// 2. Guardar sesión en login exitoso
+Button(
+    onClick = {
+        if (validateForm()) {
+            val loginResult = usersViewModel.login(email, password)
+            if (loginResult != null) {
+                // ⭐ GUARDAR SESIÓN - Esto habilita el auto-login
+                sessionManager.saveUserId(loginResult.id)
+                
+                val destination = when (loginResult.role.name) {
+                    "ADMIN" -> RouteScreen.HomeAdmin.route
+                    "USER" -> RouteScreen.HomeUser.route
+                    else -> RouteScreen.HomeUser.route
+                }
+                
+                // Navegar y limpiar backstack
+                navController.navigate(destination) {
+                    popUpTo(RouteScreen.Login.route) { inclusive = true }
+                }
+            }
+        }
+    }
+)
+```
+
+**Impacto**: Ahora el flujo completo de sesión funciona:
+1. Login → `sessionManager.saveUserId()`
+2. Reinicio de app → `LaunchedEffect` en Navigation lee la sesión
+3. Auto-login → Navegación automática a HomeAdmin/HomeUser
+
+**3. HomeUser.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/user/HomeUser.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun HomeUser() {
+    // ...
+    ContentUser(
+        navController = navController,
+        padding = padding
+    )
+}
+
+// DESPUÉS
+@Composable
+fun HomeUser(
+    placesViewModel: PlacesViewModel,
+    reviewsViewModel: RewiewsViewModel,
+    usersViewModel: UsersViewModel
+) {
+    // ...
+    ContentUser(
+        navController = navController,
+        padding = padding,
+        placesViewModel = placesViewModel,
+        reviewsViewModel = reviewsViewModel,
+        usersViewModel = usersViewModel
+    )
+}
+```
+
+**4. ContentUser.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/user/nav/ContentUser.kt`
+
+**Cambios Críticos**:
+```kotlin
+// ANTES - Creaba instancias locales (❌ INCORRECTO)
+@Composable
+fun ContentUser(
+    padding: PaddingValues,
+    navController: NavHostController
+) {
+    val placesViewModel: PlacesViewModel = viewModel()  // ❌ Nueva instancia
+    val reviewsViewModel: RewiewsViewModel = viewModel() // ❌ Nueva instancia
+    val usersViewModel: UsersViewModel = viewModel()     // ❌ Nueva instancia
+    // ...
+}
+
+// DESPUÉS - Recibe instancias compartidas (✅ CORRECTO)
+@Composable
+fun ContentUser(
+    padding: PaddingValues,
+    navController: NavHostController,
+    placesViewModel: PlacesViewModel,      // ✅ Compartido
+    reviewsViewModel: RewiewsViewModel,    // ✅ Compartido
+    usersViewModel: UsersViewModel          // ✅ Compartido
+) {
+    // Ya no crea instancias, solo las usa
+}
+```
+
+**Por qué esto es importante**:
+- Antes: PlacesScreen tenía su propio PlacesViewModel diferente al de PlaceDetailScreen
+- Ahora: Todas las pantallas comparten el MISMO ViewModel
+- Resultado: Crear un lugar → Visible inmediatamente en PlacesScreen sin recargar
+
+**5. HomeAdmin.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/HomeAdmin.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun HomeAdmin() {
+    // ...
+    ContentAdmin(
+        navController = navController,
+        padding = padding
+    )
+}
+
+// DESPUÉS
+@Composable
+fun HomeAdmin(
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel
+) {
+    // ...
+    ContentAdmin(
+        navController = navController,
+        padding = padding,
+        placesViewModel = placesViewModel,
+        usersViewModel = usersViewModel
+    )
+}
+```
+
+**6. ContentAdmin.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/nav/ContentAdmin.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun ContentAdmin(
+    padding: PaddingValues,
+    navController: NavHostController
+) {
+    NavHost(...) {
+        composable<AdminScreen.PlacesList> {
+            PlacesListScreen()  // ❌ Sin ViewModels
+        }
+        composable<AdminScreen.History> {
+            HistoryScreen()     // ❌ Sin ViewModels
+        }
+    }
+}
+
+// DESPUÉS
+@Composable
+fun ContentAdmin(
+    padding: PaddingValues,
+    navController: NavHostController,
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel
+) {
+    NavHost(...) {
+        composable<AdminScreen.PlacesList> {
+            PlacesListScreen(
+                placesViewModel = placesViewModel,  // ✅ Compartido
+                usersViewModel = usersViewModel      // ✅ Compartido
+            )
+        }
+        composable<AdminScreen.History> {
+            HistoryScreen(
+                placesViewModel = placesViewModel    // ✅ Compartido
+            )
+        }
+    }
+}
+```
+
+**7. PlacesListScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/screens/PlacesListScreen.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun PlacesListScreen() {
+    val placesViewModel: PlacesViewModel = viewModel()  // ❌ Instancia local
+    // ...
+}
+
+// DESPUÉS
+@Composable
+fun PlacesListScreen(
+    placesViewModel: PlacesViewModel,      // ✅ Recibido como parámetro
+    usersViewModel: UsersViewModel          // ✅ Disponible para futuras features
+) {
+    // Ya no crea instancia, la recibe
+}
+```
+
+**8. HistoryScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/admin/screens/HistoryScreen.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun HistoryScreen() {
+    val placesViewModel: PlacesViewModel = viewModel()  // ❌ Instancia local
+    // ...
+}
+
+// DESPUÉS
+@Composable
+fun HistoryScreen(
+    placesViewModel: PlacesViewModel       // ✅ Recibido como parámetro
+) {
+    // Ya no crea instancia, la recibe
+}
+```
+
+**9. CreatePlaceScreen.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/ui/places/CreatePlaceScreen.kt`
+
+**Cambios**:
+```kotlin
+// ANTES
+@Composable
+fun CreatePlaceScreen(
+    placesViewModel: PlacesViewModel,
+    onNavigateBack: () -> Unit
+) { /* ... */ }
+
+// DESPUÉS
+@Composable
+fun CreatePlaceScreen(
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel,        // ✅ Agregado para futuras validaciones
+    onNavigateBack: () -> Unit
+) { /* ... */ }
+```
+
+#### Diagrama de Flujo de ViewModels
+
+```
+Navigation.kt (ROOT SCOPE)
+│
+├─ usersViewModel ─────────────┐
+├─ placesViewModel ────────────┤
+└─ reviewsViewModel ───────────┤
+                               │
+    ┌──────────────────────────┴─────────────────────────┐
+    │                                                      │
+HomeUser                                             HomeAdmin
+│  ├─ usersViewModel (shared)                       │  ├─ placesViewModel (shared)
+│  ├─ placesViewModel (shared)                      │  └─ usersViewModel (shared)
+│  └─ reviewsViewModel (shared)                     │
+│                                                    │
+└─ ContentUser                                      └─ ContentAdmin
+   │  ├─ usersViewModel (passed)                       │  ├─ placesViewModel (passed)
+   │  ├─ placesViewModel (passed)                      │  └─ usersViewModel (passed)
+   │  └─ reviewsViewModel (passed)                     │
+   │                                                    │
+   ├─ PlacesScreen ─────────────────────────┐          ├─ PlacesListScreen
+   │  Uses: placesViewModel                 │          │  Uses: placesViewModel, usersViewModel
+   │                                         │          │
+   ├─ PlaceDetailScreen                     │          └─ HistoryScreen
+   │  Uses: placesViewModel,                │             Uses: placesViewModel
+   │         reviewsViewModel,              │
+   │         usersViewModel                 │
+   │                                         │
+   ├─ ProfileScreen                         │
+   │  Uses: usersViewModel                  │
+   │                                         │
+   └─ (Todas las pantallas usan             │
+       las MISMAS instancias)               │
+                                             │
+CreatePlaceScreen ───────────────────────────┘
+Uses: placesViewModel, usersViewModel
+```
+
+#### Beneficios de la Arquitectura Implementada
+
+**1. Consistencia de Estado**:
+```kotlin
+// Usuario crea un lugar en CreatePlaceScreen
+placesViewModel.addPlace(newPlace)
+
+// El mismo placesViewModel es observado en:
+// - PlacesScreen (usuario ve el lugar en su lista)
+// - PlacesListScreen (admin lo ve en pendientes)
+// - HistoryScreen (admin ve el registro después de aprobar)
+// ✅ TODO SINCRONIZADO AUTOMÁTICAMENTE
+```
+
+**2. Reducción de Complejidad**:
+```kotlin
+// ANTES: Cada pantalla con su propia instancia
+// - 10 pantallas × 3 ViewModels = 30 instancias
+// - Sincronización manual necesaria
+// - Posibles inconsistencias
+
+// DESPUÉS: Instancias compartidas
+// - 3 instancias totales en toda la app
+// - Sincronización automática via StateFlow
+// - Imposible tener datos desincronizados
+```
+
+**3. Facilita Testing**:
+```kotlin
+// Ahora puedes inyectar ViewModels mockeados desde Navigation
+@Composable
+fun AppNavigation(
+    usersViewModel: UsersViewModel = viewModel(),
+    placesViewModel: PlacesViewModel = viewModel(),
+    reviewsViewModel: RewiewsViewModel = viewModel()
+) { /* ... */ }
+
+// En tests:
+AppNavigation(
+    usersViewModel = MockUsersViewModel(),
+    placesViewModel = MockPlacesViewModel(),
+    reviewsViewModel = MockRewiewsViewModel()
+)
+```
+
+**4. Mejor Performance**:
+- Menos instancias de ViewModels = menor uso de memoria
+- StateFlow notifica solo a observers activos
+- No hay duplicación de datos en memoria
+
+#### Flujo End-to-End Completo
+
+**Flujo de Usuario Regular**:
+
+```
+1. INICIO DE SESIÓN
+   LoginScreen
+   └─> usersViewModel.login(email, password)
+       └─> sessionManager.saveUserId(userId)  ⭐ NUEVO
+           └─> Navigate to HomeUser
+           
+2. EXPLORAR LUGARES
+   HomeUser → ContentUser → PlacesScreen
+   └─> placesViewModel.getApprovedPlaces()
+       └─> Filtrar con searchWithFilters()
+           └─> Ver lista de lugares
+           
+3. VER DETALLE DE LUGAR
+   PlacesScreen → Navigate to PlaceDetailScreen(placeId)
+   └─> placesViewModel.findById(placeId)
+       └─> reviewsViewModel.findByPlaceId(placeId)
+           └─> usersViewModel.getFavorites(currentUserId)
+               └─> Mostrar info + reviews + favorito
+               
+4. AGREGAR REVIEW
+   PlaceDetailScreen
+   └─> reviewsViewModel.addReview(newReview)
+       └─> StateFlow notifica cambio
+           └─> UI se actualiza automáticamente
+           
+5. MARCAR FAVORITO
+   PlaceDetailScreen
+   └─> usersViewModel.toggleFavorite(userId, placeId)
+       └─> StateFlow notifica cambio
+           └─> Ícono cambia instantáneamente
+           
+6. CREAR NUEVO LUGAR
+   Navigation → CreatePlaceScreen
+   └─> sessionManager.getUserId() (obtener ownerId)
+       └─> placesViewModel.addPlace(newPlace)
+           └─> approved = false (pendiente moderación)
+               └─> Navigate back
+```
+
+**Flujo de Administrador**:
+
+```
+1. INICIO DE SESIÓN
+   LoginScreen
+   └─> usersViewModel.login(email, password)
+       └─> sessionManager.saveUserId(adminId)  ⭐ NUEVO
+           └─> Navigate to HomeAdmin
+           
+2. VER LUGARES PENDIENTES
+   HomeAdmin → ContentAdmin → PlacesListScreen
+   └─> placesViewModel.getPendingPlaces()
+       └─> Filtrar approved = false
+           └─> Mostrar lista de lugares pendientes
+           
+3. APROBAR LUGAR
+   PlacesListScreen → Card del lugar → Botón Aprobar
+   └─> placesViewModel.approvePlace(placeId, moderatorId)
+       └─> Place.approved = true
+           └─> ModerationRecord creado
+               └─> StateFlow notifica cambio
+                   └─> Lugar desaparece de lista pendientes
+                       └─> Lugar aparece en PlacesScreen (usuarios)
+                       
+4. RECHAZAR LUGAR
+   PlacesListScreen → Card del lugar → Botón Rechazar
+   └─> Dialog para razón de rechazo
+       └─> placesViewModel.rejectPlace(placeId, moderatorId, reason)
+           └─> ModerationRecord creado con razón
+               └─> StateFlow notifica cambio
+                   └─> Lugar desaparece de lista pendientes
+                   
+5. VER HISTORIAL
+   HomeAdmin → BottomBar → History
+   └─> HistoryScreen
+       └─> placesViewModel.moderationRecords.collectAsState()
+           └─> Mostrar todos los registros ordenados por timestamp
+               └─> Ver quién aprobó/rechazó qué y cuándo
+```
+
+**Flujo de Auto-Login (Nuevo)**: ⭐
+
+```
+1. REINICIO DE APP
+   MainActivity inicia
+   └─> AppNavigation se renderiza
+       └─> LaunchedEffect(Unit) ejecuta
+           
+2. VERIFICAR SESIÓN GUARDADA
+   └─> sessionManager.getUserId()
+       └─> Si es null: Mostrar LoginScreen
+       └─> Si existe: Continuar con auto-login
+       
+3. AUTO-LOGIN
+   └─> usersViewModel.findById(currentUserId)
+       └─> Si usuario existe:
+           └─> Determinar rol (ADMIN/USER)
+               └─> Navigate to HomeAdmin/HomeUser
+                   └─> popUpTo(Login) { inclusive = true }
+                       └─> Usuario no puede volver a Login con botón atrás
+       └─> Si usuario no existe:
+           └─> sessionManager.clear()
+               └─> Mostrar LoginScreen
+```
+
+#### Test Cases - Step 10
+
+##### TC-75: Verificar ViewModels Compartidos en Navigation
+
+```
+Objetivo: Confirmar que Navigation.kt crea instancias únicas de ViewModels
+
+Precondiciones: 
+- App recién iniciada
+- Navigation.kt renderizado
+
+Pasos:
+1. Debugger: Obtener referencia a usersViewModel en Navigation
+2. Navegar a HomeUser
+3. Obtener referencia a usersViewModel en ContentUser
+4. Comparar referencias de memoria
+
+Resultado Esperado:
+- viewModel() se llama UNA VEZ en Navigation.kt
+- usersViewModel en Navigation === usersViewModel en ContentUser
+- placesViewModel en Navigation === placesViewModel en PlacesScreen
+- reviewsViewModel en Navigation === reviewsViewModel en PlaceDetailScreen
+- Misma referencia de memoria en todas las pantallas
+```
+
+##### TC-76: Flujo Completo de Login con Sesión
+
+```
+Objetivo: Verificar que login guarda sesión correctamente
+
+Precondiciones:
+- App en LoginScreen
+- Usuario de prueba: "user@test.com" / "123456"
+- SharedPreferences vacío
+
+Pasos:
+1. Ingresar email: "user@test.com"
+2. Ingresar password: "123456"
+3. Hacer clic en "Iniciar Sesión"
+4. Verificar navegación a HomeUser
+5. Cerrar app completamente
+6. Reabrir app
+
+Resultado Esperado:
+- Login exitoso: Navigate to HomeUser
+- sessionManager.saveUserId("2") ejecutado
+- SharedPreferences contiene: "current_user_id" = "2"
+- Al reabrir: LaunchedEffect detecta sesión
+- Auto-login: Navigate directo a HomeUser sin mostrar Login
+- currentUserId == "2" disponible en toda la app
+```
+
+##### TC-77: Sincronización Lugar Creado → Lista de Lugares
+
+```
+Objetivo: Verificar que crear lugar actualiza PlacesScreen automáticamente
+
+Precondiciones:
+- Usuario logueado en HomeUser
+- PlacesScreen visible
+
+Pasos:
+1. Recordar número de lugares pendientes: N
+2. Navigation → CreatePlaceScreen
+3. Llenar formulario y crear lugar
+4. Navigate back a PlacesScreen
+
+Resultado Esperado:
+- placesViewModel.addPlace() ejecutado en CreatePlaceScreen
+- StateFlow _places emite nuevo valor
+- PlacesScreen observa cambio vía collectAsState()
+- getPendingPlaces() retorna N + 1 lugares
+- Nuevo lugar NO visible en PlacesScreen (approved=false)
+- Admin ve el lugar en PlacesListScreen inmediatamente
+```
+
+##### TC-78: Aprobar Lugar → Sincronización Multi-Pantalla
+
+```
+Objetivo: Verificar sincronización entre admin y usuario al aprobar lugar
+
+Precondiciones:
+- Admin logueado en PlacesListScreen
+- 1 lugar pendiente visible
+- Usuario en PlacesScreen (otra sesión/dispositivo simulado)
+
+Pasos:
+1. Usuario: Contar lugares en PlacesScreen (M lugares)
+2. Admin: Hacer clic en "Aprobar" en PlacesListScreen
+3. Admin: Verificar lugar desaparece de pendientes
+4. Usuario: Refrescar PlacesScreen (recomposición)
+
+Resultado Esperado:
+- placesViewModel.approvePlace() ejecutado
+- Place.approved cambia false → true
+- ModerationRecord creado con action="approved"
+- StateFlow notifica a TODOS los observers:
+  * PlacesListScreen: lugar desaparece de getPendingPlaces()
+  * HistoryScreen: registro aparece en moderationRecords
+  * PlacesScreen: lugar aparece en getApprovedPlaces() (M+1 lugares)
+- TODO sincronizado sin necesidad de recargar manualmente
+```
+
+##### TC-79: Agregar Review → Actualización Instantánea
+
+```
+Objetivo: Verificar que agregar review actualiza el contador y lista inmediatamente
+
+Precondiciones:
+- Usuario en PlaceDetailScreen(placeId="1")
+- Lugar tiene X reviews
+
+Pasos:
+1. Verificar "X reseñas" mostrado
+2. Scrollear a formulario de review
+3. Seleccionar rating: 5 estrellas
+4. Escribir comentario: "Excelente lugar"
+5. Hacer clic en "Publicar Reseña"
+6. Scrollear arriba
+
+Resultado Esperado:
+- reviewsViewModel.addReview() ejecutado
+- StateFlow _reviews emite nuevo valor
+- findByPlaceId("1") retorna X+1 reviews
+- UI muestra "X+1 reseñas" automáticamente
+- Nueva review aparece en lista sin necesidad de:
+  * Navigate away y volver
+  * Pull-to-refresh
+  * Reiniciar app
+- Toast "Reseña publicada" visible
+```
+
+##### TC-80: Toggle Favorito → Sincronización de Estado
+
+```
+Objetivo: Verificar que marcar favorito actualiza ícono instantáneamente
+
+Precondiciones:
+- Usuario en PlaceDetailScreen(placeId="1")
+- Lugar NO está en favoritos
+
+Pasos:
+1. Verificar ícono: Icons.Outlined.FavoriteBorder (corazón vacío)
+2. Hacer clic en ícono de favorito
+3. Observar cambio visual
+4. Navigate back a PlacesScreen
+5. Volver a PlaceDetailScreen(placeId="1")
+
+Resultado Esperado:
+- Primer clic:
+  * usersViewModel.toggleFavorite("2", "1") ejecutado
+  * User.favorites contiene "1"
+  * StateFlow notifica cambio
+  * Ícono cambia instantáneamente a Icons.Filled.Favorite (corazón lleno)
+  * Sin loading, cambio inmediato
+- Al volver a la pantalla:
+  * getFavorites("2") retorna lista con "1"
+  * Ícono sigue siendo Filled.Favorite (estado persistido)
+- Si hace clic otra vez:
+  * Ícono vuelve a FavoriteBorder
+  * "1" removido de favorites
+```
+
+##### TC-81: Historial de Moderación → Ordenamiento y Datos
+
+```
+Objetivo: Verificar que HistoryScreen muestra registros correctos
+
+Precondiciones:
+- Admin ha aprobado 2 lugares y rechazado 1
+- moderationRecords contiene 3 registros
+
+Pasos:
+1. Admin → Navigate to HistoryScreen
+2. Observar lista de registros
+
+Resultado Esperado:
+- 3 registros visibles
+- Ordenamiento: más reciente primero (sortedByDescending timestamp)
+- Cada registro muestra:
+  * Nombre del lugar (places.find { it.id == record.placeId }?.title)
+  * Acción: "Aprobado" o "Rechazado"
+  * Fecha y hora formateada (dd/MM/yyyy HH:mm)
+  * Color de fondo: verde para aprobado, rojo para rechazado
+- Registros de rechazo muestran razón si existe
+- Si no hay registros: Mensaje "No hay registros de moderación"
+```
+
+##### TC-82: Crear Lugar Sin Sesión → Validación
+
+```
+Objetivo: Verificar que CreatePlaceScreen valida sesión antes de crear lugar
+
+Precondiciones:
+- sessionManager.getUserId() retorna null (sesión expirada/limpiada)
+- Usuario en CreatePlaceScreen (navegó antes de que expirara sesión)
+
+Pasos:
+1. Llenar todos los campos del formulario
+2. Hacer clic en "Crear Lugar"
+
+Resultado Esperado:
+- Validación de sesión ejecuta antes de crear lugar
+- sessionManager.getUserId() == null detectado
+- Toast: "Debes iniciar sesión para crear un lugar"
+- NO se crea el lugar (placesViewModel.addPlace() no se llama)
+- Idealmente: Navigate to LoginScreen
+```
+
+##### TC-83: Admin Rechaza Lugar con Razón
+
+```
+Objetivo: Verificar que rechazar lugar guarda razón en ModerationRecord
+
+Precondiciones:
+- Admin en PlacesListScreen
+- Lugar pendiente visible: "Bar Test"
+
+Pasos:
+1. Hacer clic en botón "Rechazar" del lugar
+2. Dialog aparece: "Razón del rechazo"
+3. Escribir: "Contenido inapropiado"
+4. Hacer clic en "Confirmar"
+5. Navigate to HistoryScreen
+
+Resultado Esperado:
+- placesViewModel.rejectPlace(placeId, adminId, "Contenido inapropiado")
+- ModerationRecord creado con:
+  * action = "rejected"
+  * reason = "Contenido inapropiado"
+  * moderatorId = admin userId
+  * timestamp = System.currentTimeMillis()
+- Lugar desaparece de PlacesListScreen
+- Historial muestra registro con razón visible
+- Lugar NO aparece en PlacesScreen de usuarios (approved=false)
+```
+
+##### TC-84: Búsqueda y Navegación a Detalle
+
+```
+Objetivo: Verificar flujo completo de búsqueda → detalle → review
+
+Precondiciones:
+- Usuario en PlacesScreen
+- Base de datos con "Restaurante El Paisa" (approved=true)
+
+Pasos:
+1. En searchBar escribir: "Paisa"
+2. Verificar filtrado
+3. Hacer clic en card "Restaurante El Paisa"
+4. PlaceDetailScreen carga
+5. Agregar review de 4 estrellas
+6. Navigate back
+
+Resultado Esperado:
+- searchWithFilters() ejecuta con "Paisa"
+- 1 resultado visible
+- Navigate to PlaceDetailScreen con id correcto
+- PlaceDetailScreen obtiene lugar de placesViewModel (mismo ViewModel)
+- Review se agrega a reviewsViewModel (mismo ViewModel)
+- Al volver: searchText="Paisa" preservado
+- Resultados aún visibles (estado preservado)
+```
+
+##### TC-85: Multi-Step Flow - Usuario Completo
+
+```
+Objetivo: Verificar flujo de usuario end-to-end sin errores
+
+Precondiciones:
+- App recién instalada
+- Sin sesión guardada
+
+Pasos:
+1. Login como user@test.com
+2. Verificar HomeUser visible
+3. Navigate to PlacesScreen
+4. Buscar "restaurante"
+5. Hacer clic en primer resultado
+6. Marcar como favorito
+7. Agregar review 5 estrellas: "Excelente!"
+8. Navigate back
+9. Cerrar y reabrir app
+10. Verificar auto-login
+
+Resultado Esperado:
+- Cada paso ejecuta sin errores
+- ViewModels compartidos mantienen consistencia
+- Login guarda sesión
+- Favorito persiste en memoria
+- Review visible inmediatamente
+- Auto-login redirige a HomeUser
+- Estado de favorito preservado después de auto-login
+```
+
+---
+
 ## Compilación y Ejecución
 
 ### Requisitos

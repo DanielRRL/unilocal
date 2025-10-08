@@ -2,7 +2,6 @@ package co.edu.eam.lugaresapp.ui.user.nav
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,20 +19,25 @@ import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
  * NAVEGACIÓN INTERNA DE USUARIO
  * 
  * Maneja la navegación entre las pantallas del módulo de usuario.
- * Inyecta los ViewModels necesarios para compartir estado entre pantallas.
+ * Recibe los ViewModels desde HomeUser para compartir estado entre pantallas.
+ * 
+ * IMPORTANTE: No crea nuevas instancias de ViewModels, los recibe como parámetros
+ * para garantizar que todas las pantallas compartan el mismo estado.
  * 
  * @param padding Padding de la navegación principal
  * @param navController Controlador de navegación interna
+ * @param placesViewModel ViewModel compartido de lugares
+ * @param reviewsViewModel ViewModel compartido de reseñas
+ * @param usersViewModel ViewModel compartido de usuarios
  */
 @Composable
 fun ContentUser(
     padding: PaddingValues,
-    navController: NavHostController
+    navController: NavHostController,
+    placesViewModel: PlacesViewModel,
+    reviewsViewModel: RewiewsViewModel,
+    usersViewModel: UsersViewModel
 ){
-    // Inicialización de ViewModels compartidos
-    val placesViewModel: PlacesViewModel = viewModel()
-    val reviewsViewModel: RewiewsViewModel = viewModel()
-    val usersViewModel: UsersViewModel = viewModel()
 
     NavHost(
         navController = navController,

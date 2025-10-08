@@ -12,15 +12,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import co.edu.eam.lugaresapp.model.ModerationRecord
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * PANTALLA DE HISTORIAL DE MODERACIÓN
+ * 
+ * Muestra el historial completo de acciones de moderación (aprobar/rechazar).
+ * 
+ * @param placesViewModel ViewModel de lugares (compartido)
+ */
 @Composable
-fun HistoryScreen() {
-    val placesViewModel: PlacesViewModel = viewModel()
+fun HistoryScreen(
+    placesViewModel: PlacesViewModel
+) {
     val moderationRecords by placesViewModel.moderationRecords.collectAsState()
     val places by placesViewModel.places.collectAsState()
     

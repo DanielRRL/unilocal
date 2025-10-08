@@ -14,15 +14,25 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import co.edu.eam.lugaresapp.data.SessionManager
 import co.edu.eam.lugaresapp.model.Place
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
+import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
+/**
+ * PANTALLA DE LISTA DE LUGARES PENDIENTES
+ * 
+ * Permite a los administradores ver y moderar lugares pendientes de aprobación.
+ * 
+ * @param placesViewModel ViewModel de lugares (compartido)
+ * @param usersViewModel ViewModel de usuarios (compartido)
+ */
 @Composable
-fun PlacesListScreen() {
-    val placesViewModel: PlacesViewModel = viewModel()
+fun PlacesListScreen(
+    placesViewModel: PlacesViewModel,
+    usersViewModel: UsersViewModel
+) {
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
     
