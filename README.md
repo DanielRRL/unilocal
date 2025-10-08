@@ -283,6 +283,118 @@ LaunchedEffect(Unit) {
 5. Limpia el backstack para prevenir navegación incorrecta
 6. Si el usuario no existe, limpia la sesión automáticamente
 
+---
+
+### Step 2: Extensión de Modelos de Datos
+
+Se extendieron los modelos de datos principales para soportar funcionalidades de moderación, propiedad de lugares y favoritos, manteniendo compatibilidad retroactiva mediante valores por defecto.
+
+#### Archivos Modificados
+
+**1. Place.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/model/Place.kt`
+
+**Campos Añadidos**:
+
+```kotlin
+val approved: Boolean = false              // Moderación: indica si el lugar ha sido aprobado
+val ownerId: String? = null                // ID del usuario propietario del lugar
+val createdAt: Long = System.currentTimeMillis()  // Timestamp de creación
+```
+
+**Propósito**:
+- `approved`: Permite implementar un sistema de moderación donde los administradores deben aprobar lugares antes de que sean visibles públicamente
+- `ownerId`: Vincula un lugar con su propietario, permitiendo funcionalidades como edición exclusiva y respuesta a reseñas
+- `createdAt`: Facilita ordenamiento por fecha de creación y auditoría
+
+**Compatibilidad**: Los tres campos tienen valores por defecto, por lo que cualquier código existente que cree instancias de `Place` sin estos campos seguirá funcionando sin modificaciones.
+
+**2. User.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/model/User.kt`
+
+**Campo Añadido**:
+
+```kotlin
+val favorites: List<String> = emptyList()  // IDs de lugares favoritos del usuario
+```
+
+**Propósito**:
+- Permite a los usuarios marcar lugares como favoritos
+- Facilita la creación de una sección "Mis Favoritos" en la interfaz
+- Los IDs se almacenan como lista de Strings (referencias a Place.id)
+
+**Compatibilidad**: El campo tiene una lista vacía por defecto, manteniendo compatibilidad con código existente.
+
+**3. Review.kt**
+
+**Ubicación**: `app/src/main/java/co/edu/eam/lugaresapp/model/Review.kt`
+
+**Campo Añadido**:
+
+```kotlin
+val ownerResponse: String? = null  // Respuesta del propietario a la reseña
+```
+
+**Propósito**:
+- Permite a los propietarios de lugares responder a las reseñas de usuarios
+- Mejora la interacción entre propietarios y clientes
+- Es opcional (nullable) ya que no todas las reseñas tendrán respuesta
+
+**Compatibilidad**: Al ser nullable con valor por defecto `null`, no afecta código existente.
+
+#### Beneficios de la Implementación
+
+**Seguridad y Control**:
+- Sistema de moderación para prevenir contenido inapropiado
+- Vinculación clara de propiedad de lugares
+
+**Mejora de UX**:
+- Usuarios pueden guardar lugares favoritos
+- Propietarios pueden responder a feedback
+- Mejor organización temporal de contenido
+
+**Escalabilidad**:
+- Base para implementar notificaciones (nuevos lugares, respuestas a reseñas)
+- Soporte para estadísticas y reportes
+- Preparación para sistema de permisos más granular
+
+##### Funcionalidad de Auto-Login:
+
+Se implementó la detección automática de sesión activa mediante `LaunchedEffect`:
+
+```kotlin
+val context = LocalContext.current
+val sessionManager = SessionManager(context)
+
+LaunchedEffect(Unit) {
+    val currentUserId = sessionManager.getUserId()
+    if (currentUserId != null) {
+        val user = usersViewModel.findById(currentUserId)
+        if (user != null) {
+            val destination = when (user.role) {
+                Role.ADMIN -> RouteScreen.HomeAdmin.route
+                Role.USER -> RouteScreen.HomeUser.route
+            }
+            navController.navigate(destination) {
+                popUpTo(RouteScreen.Login.route) { inclusive = true }
+            }
+        } else {
+            sessionManager.clear()
+        }
+    }
+}
+```
+
+**Comportamiento**:
+1. Se ejecuta una sola vez al inicializar la navegación (clave: `Unit`)
+2. Obtiene el userId guardado en SharedPreferences
+3. Si existe sesión válida, busca el usuario en el ViewModel
+4. Navega automáticamente a HomeAdmin o HomeUser según el rol
+5. Limpia el backstack para prevenir navegación incorrecta
+6. Si el usuario no existe, limpia la sesión automáticamente
+
 ## Flujo de Autenticación
 
 ### Primer Acceso (Sin Sesión)
@@ -659,24 +771,34 @@ android {
 
 - Arquitectura MVVM completa
 - Sistema de navegación con Jetpack Navigation Compose
-- Gestión de sesión con SharedPreferences
+- Gestión de sesión con SharedPreferences (SessionManager)
 - Auto-login en inicio de aplicación
 - Pantallas de autenticación (Login, Register, Password Recovery)
 - Interfaces diferenciadas para Usuario y Administrador
 - ViewModels para gestión de usuarios, lugares y reseñas
 - Componentes UI reutilizables
 - Tema Material 3 personalizado
+- Modelos de datos extendidos con soporte para:
+  - Moderación de lugares (campo `approved`)
+  - Propiedad de lugares (campo `ownerId`)
+  - Sistema de favoritos (campo `favorites` en User)
+  - Respuestas de propietarios a reseñas (campo `ownerResponse`)
+  - Timestamps de creación (campo `createdAt`)
 
 ### Funcionalidades Pendientes
 
 - Implementación completa de LoginScreen con SessionManager
 - Implementación de funcionalidad de Logout
+- Lógica de moderación de lugares (aprobación/rechazo por admin)
+- Sistema de gestión de favoritos (agregar/remover)
+- Interfaz para respuestas de propietarios a reseñas
 - Integración con backend/API REST
 - Persistencia de datos con Room Database
 - Funcionalidad de mapas con Google Maps
 - Carga y gestión de imágenes
 - Sistema de notificaciones
 - Validación de email y recuperación de contraseña
+- Filtrado de lugares por estado de aprobación
 - Tests unitarios e instrumentados
 
 ## Contacto y Contribución

@@ -16,20 +16,22 @@ package co.edu.eam.lugaresapp.model
  * - Todas las propiedades son requeridas (no opcionales)
  * 
  * ESTRUCTURA DE USUARIO:
- * @param id: String - Identificador único del usuario 
- * @param name: String - Nombre completo del usuario
- * @param username: String - Nombre de usuario para login 
- * @param role: Role - Rol del usuario  - define permisos
- * @param city: String - Ciudad de residencia del usuario
- * @param email: String - Email único del usuario 
- * @param password: String - Contraseña del usuario 
+ * @param id Identificador único del usuario
+ * @param name Nombre completo del usuario
+ * @param username Nombre de usuario para login
+ * @param role Rol del usuario - define permisos
+ * @param city Ciudad de residencia del usuario
+ * @param email Email único del usuario
+ * @param password Contraseña del usuario
+ * @param favorites Lista de IDs de lugares marcados como favoritos por el usuario
  */
 data class User(
-    val id: String,        // Identificador único 
-    val name: String,      // Nombre completo 
-    val username: String,  // Username para login 
-    val role: Role,        // Rol/permisos 
-    val city: String,      // Ciudad 
-    val email: String,     // Email único 
-    val password: String   // Contraseña 
+    val id: String,
+    val name: String,
+    val username: String,
+    val role: Role,
+    val city: String,
+    val email: String,
+    val password: String,
+    val favorites: List<String> = emptyList()
 )
