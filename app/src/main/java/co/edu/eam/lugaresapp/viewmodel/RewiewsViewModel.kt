@@ -180,6 +180,18 @@ class RewiewsViewModel: ViewModel() {
             }
         }
     }
+    
+    /**
+     * AGREGAR RESPUESTA DE PROPIETARIO
+     * 
+     * Alias para replyToReview. Permite al propietario responder a una reseña.
+     * 
+     * @param reviewId ID de la reseña a la que se responde
+     * @param response Texto de la respuesta del propietario
+     */
+    fun addOwnerResponse(reviewId: String, response: String) {
+        replyToReview(reviewId, response)
+    }
 
     /**
      * ELIMINAR RESEÑA

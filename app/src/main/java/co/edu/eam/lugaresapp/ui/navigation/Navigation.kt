@@ -196,7 +196,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 HomeUser(
                     placesViewModel = placesViewModel,
                     reviewsViewModel = reviewsViewModel,
-                    usersViewModel = usersViewModel
+                    usersViewModel = usersViewModel,
+                    onLogout = {
+                        // Limpiar sesión y volver al login
+                        navController.navigate(RouteScreen.Login.route) {
+                            popUpTo(RouteScreen.HomeUser.route) { inclusive = true }
+                        }
+                    }
                 )
             }
 
@@ -210,7 +216,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             composable(RouteScreen.HomeAdmin.route) {
                 HomeAdmin(
                     placesViewModel = placesViewModel,
-                    usersViewModel = usersViewModel
+                    usersViewModel = usersViewModel,
+                    onLogout = {
+                        // Limpiar sesión y volver al login
+                        navController.navigate(RouteScreen.Login.route) {
+                            popUpTo(RouteScreen.HomeAdmin.route) { inclusive = true }
+                        }
+                    }
                 )
             }
 

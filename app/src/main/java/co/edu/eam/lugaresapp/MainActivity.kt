@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
              * APLICACIÓN DEL TEMA uniLocal
              * 
              * LugaresAppTheme envuelve toda la aplicación y aplica:
-             * - Colores del mockup azul (#87CEEB, #E6F0FA, etc.)
+             * - Colores del mockup azul (#87CEEB, #d2e8feff, etc.)
              * - Tipografía Material 3
              * - Esquemas light/dark
              * - Todos los tokens de diseño de uniLocal

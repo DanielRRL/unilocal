@@ -9,7 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Star
@@ -45,9 +47,11 @@ import java.util.UUID
  * - Galería de imágenes con scroll horizontal
  * - Información detallada del lugar
  * - Botón de favorito con toggle
+ * - Botón de eliminar para propietario
  * - Estado de horario en tiempo real (Abierto/Cerrado)
  * - Lista de reseñas con respuestas de propietarios
  * - Formulario para agregar reseñas
+ * - Formulario para responder reseñas (solo propietario)
  * - Validación de sesión para acciones
  * 
  * @param placesViewModel ViewModel de lugares
@@ -55,6 +59,7 @@ import java.util.UUID
  * @param usersViewModel ViewModel de usuarios
  * @param padding Padding de la navegación
  * @param id ID del lugar a mostrar
+ * @param onNavigateBack Callback para volver atrás después de eliminar
  */
 @Composable
 fun PlaceDetailScreen(
@@ -63,6 +68,7 @@ fun PlaceDetailScreen(
     usersViewModel: UsersViewModel,
     padding: PaddingValues,
     id: String,
+    onNavigateBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
@@ -74,6 +80,13 @@ fun PlaceDetailScreen(
     var reviewRating by remember { mutableStateOf(5) }
     var reviewComment by remember { mutableStateOf("") }
     
+    // Estado para responder a una reseña
+    var selectedReviewForResponse by remember { mutableStateOf<Review?>(null) }
+    var responseText by remember { mutableStateOf("") }
+    
+    // Estado para diálogo de eliminación
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    
     // Obtener favoritos del usuario
     val favorites = currentUserId?.let { 
         usersViewModel.getFavorites(it) 
@@ -84,6 +97,9 @@ fun PlaceDetailScreen(
     val placeReviews = reviewsViewModel.findByPlaceId(id)
     val averageRating = reviewsViewModel.getAverageRating(id)
     val reviewCount = reviewsViewModel.getReviewCount(id)
+    
+    // Verificar si el usuario actual es el propietario
+    val isOwner = currentUserId != null && place?.ownerId == currentUserId
 
     if (place == null) {
         Box(
@@ -143,25 +159,47 @@ fun PlaceDetailScreen(
                     modifier = Modifier.weight(1f)
                 )
                 
-                IconButton(
-                    onClick = {
-                        if (currentUserId != null) {
-                            usersViewModel.toggleFavorite(currentUserId, id)
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "Debes iniciar sesión para guardar favoritos",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Botón de favorito
+                    IconButton(
+                        onClick = {
+                            if (currentUserId != null) {
+                                usersViewModel.toggleFavorite(currentUserId, id)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Debes iniciar sesión para guardar favoritos",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                            tint = if (isFavorite) Color.Red else Color.Gray,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    
+                    // Botón de eliminar (solo para el propietario)
+                    if (isOwner) {
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Eliminar lugar",
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
                     }
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
-                        tint = if (isFavorite) Color.Red else Color.Gray,
-                        modifier = Modifier.size(32.dp)
-                    )
                 }
             }
 
@@ -431,7 +469,15 @@ fun PlaceDetailScreen(
                 )
             } else {
                 placeReviews.forEach { review ->
-                    ReviewCard(review = review, usersViewModel = usersViewModel)
+                    ReviewCard(
+                        review = review,
+                        usersViewModel = usersViewModel,
+                        isOwner = isOwner,
+                        onRespondClick = {
+                            selectedReviewForResponse = review
+                            responseText = ""
+                        }
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
@@ -439,17 +485,125 @@ fun PlaceDetailScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+    
+    // ==================== DIÁLOGOS ====================
+    
+    // Diálogo de confirmación de eliminación
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar Lugar") },
+            text = { 
+                Text("¿Estás seguro que deseas eliminar este lugar? Esta acción no se puede deshacer.") 
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        placesViewModel.deletePlace(id)
+                        showDeleteDialog = false
+                        Toast.makeText(
+                            context,
+                            "Lugar eliminado exitosamente",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        onNavigateBack?.invoke()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+    
+    // Diálogo para responder a una reseña
+    if (selectedReviewForResponse != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                selectedReviewForResponse = null
+                responseText = ""
+            },
+            title = { Text("Responder Reseña") },
+            text = {
+                Column {
+                    Text(
+                        text = "Comentario: \"${selectedReviewForResponse?.comment}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = responseText,
+                        onValueChange = { responseText = it },
+                        label = { Text("Tu respuesta") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (responseText.isNotBlank()) {
+                            selectedReviewForResponse?.let { review ->
+                                reviewsViewModel.addOwnerResponse(review.id, responseText.trim())
+                                Toast.makeText(
+                                    context,
+                                    "Respuesta publicada exitosamente",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            selectedReviewForResponse = null
+                            responseText = ""
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "La respuesta no puede estar vacía",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                ) {
+                    Text("Publicar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    selectedReviewForResponse = null
+                    responseText = ""
+                }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 /**
  * TARJETA DE RESEÑA
  * 
  * Muestra una reseña individual con rating, comentario y respuesta del propietario.
+ * Si el usuario es el propietario del lugar y la reseña no tiene respuesta, muestra un botón para responder.
+ * 
+ * @param review Reseña a mostrar
+ * @param usersViewModel ViewModel de usuarios
+ * @param isOwner Indica si el usuario actual es el propietario del lugar
+ * @param onRespondClick Callback para responder a la reseña
  */
 @Composable
 fun ReviewCard(
     review: Review,
-    usersViewModel: UsersViewModel
+    usersViewModel: UsersViewModel,
+    isOwner: Boolean = false,
+    onRespondClick: () -> Unit = {}
 ) {
     val user = usersViewModel.findById(review.userID)
     
@@ -526,6 +680,23 @@ fun ReviewCard(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
+                }
+            }
+            
+            // Botón de responder (solo para propietario y si no hay respuesta aún)
+            if (isOwner && review.ownerResponse == null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(
+                    onClick = onRespondClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Reply,
+                        contentDescription = "Responder",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Responder a esta reseña")
                 }
             }
         }

@@ -59,7 +59,17 @@ fun ContentUser(
             )
         }
         composable<UserScreen.Profile> {
-            ProfileScreen()
+            ProfileScreen(
+                usersViewModel = usersViewModel,
+                placesViewModel = placesViewModel,
+                reviewsViewModel = reviewsViewModel,
+                onNavigateToPlaceDetail = { placeId ->
+                    navController.navigate(UserScreen.PlaceDetail(placeId))
+                },
+                onLogout = {
+                    // La navegación al login se manejará desde Navigation.kt
+                }
+            )
         }
         composable<UserScreen.PlaceDetail> {
             val args = it.toRoute<UserScreen.PlaceDetail>()
@@ -68,7 +78,10 @@ fun ContentUser(
                 reviewsViewModel = reviewsViewModel,
                 usersViewModel = usersViewModel,
                 padding = padding,
-                id = args.id
+                id = args.id,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
             )
         }
     }

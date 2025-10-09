@@ -199,6 +199,19 @@ class PlacesViewModel: ViewModel() {
     fun getPendingPlaces(): List<Place> {
         return _places.value.filter { !it.approved }
     }
+    
+    /**
+     * OBTENER LUGARES POR PROPIETARIO
+     * 
+     * Retorna todos los lugares creados por un usuario específico.
+     * Útil para mostrar los lugares de un usuario en su perfil.
+     * 
+     * @param ownerId ID del propietario/usuario
+     * @return Lista de lugares del propietario
+     */
+    fun getPlacesByOwner(ownerId: String): List<Place> {
+        return _places.value.filter { it.ownerId == ownerId }
+    }
 
     /**
      * APROBAR LUGAR
