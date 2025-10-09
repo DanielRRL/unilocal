@@ -286,4 +286,95 @@ class UsersViewModel: ViewModel(){
         return _users.value.find { it.id == userId }?.favorites ?: emptyList()
     }
 
+    // ==================== ACTUALIZACIÓN DE PERFIL ====================
+
+    /**
+     * ACTUALIZAR DATOS DE USUARIO
+     * 
+     * Permite actualizar los datos editables de un usuario existente.
+     * NO permite modificar email ni contraseña (campos sensibles).
+     * 
+     * FUNCIONAMIENTO:
+     * - Busca el usuario por ID
+     * - Actualiza solo los campos permitidos: name, username, city
+     * - Mantiene sin cambios: id, email, password, role, favorites
+     * - Usa copy() para crear una nueva instancia inmutable
+     * - Actualiza el StateFlow completo para notificar cambios a la UI
+     * 
+     * CAMPOS EDITABLES:
+     * - name: Nombre completo del usuario
+     * - username: Nombre de usuario único
+     * - city: Ciudad de residencia
+     * 
+     * CAMPOS NO EDITABLES (razones de seguridad):
+     * - email: Identificador único, cambio requeriría re-autenticación
+     * - password: Cambio requiere validación especial y flujo seguro
+     * - role: Solo administradores pueden modificar roles
+     * - id: Inmutable por diseño
+     * - favorites: Se gestiona con toggleFavorite()
+     * 
+     * @param userId: String - ID del usuario a actualizar
+     * @param name: String - Nuevo nombre completo
+     * @param username: String - Nuevo username
+     * @param city: String - Nueva ciudad
+     * 
+     * EJEMPLO DE USO:
+     * ```
+     * usersViewModel.updateUser(
+     *     userId = "2",
+     *     name = "Daniel Fernando",
+     *     username = "danifernando",
+     *     city = "Bogotá"
+     * )
+     * ```
+     */
+    fun updateUser(
+        userId: String,
+        name: String,
+        username: String,
+        city: String
+    ) {
+        _users.value = _users.value.map { user ->
+            if (user.id == userId) {
+                // Actualizar solo campos permitidos
+                user.copy(
+                    name = name,
+                    username = username,
+                    city = city
+                    // email, password, role, id, favorites se mantienen sin cambios
+                )
+            } else {
+                // Mantener otros usuarios sin cambios
+                user
+            }
+        }
+    }
+
+    /**
+     * VERIFICAR SI EMAIL EXISTE
+     * 
+     * Comprueba si un email ya está registrado en el sistema.
+     * Útil para validaciones en el formulario de registro.
+     * 
+     * FUNCIONAMIENTO:
+     * - Compara emails ignorando mayúsculas/minúsculas
+     * - Retorna true si encuentra coincidencia
+     * - Retorna false si el email está disponible
+     * 
+     * @param email: String - Email a verificar
+     * @return Boolean - true si el email ya existe, false si está disponible
+     * 
+     * EJEMPLO DE USO:
+     * ```
+     * if (usersViewModel.existsByEmail("nuevo@email.com")) {
+     *     // Mostrar error: "Este email ya está registrado"
+     * } else {
+     *     // Continuar con el registro
+     * }
+     * ```
+     */
+    fun existsByEmail(email: String): Boolean {
+        return _users.value.any { it.email.equals(email, ignoreCase = true) }
+    }
+
 }
