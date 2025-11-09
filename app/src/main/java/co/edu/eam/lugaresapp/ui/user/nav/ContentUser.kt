@@ -43,12 +43,17 @@ fun ContentUser(
         navController = navController,
         startDestination = UserScreen.Map
     ){
+        // Pantalla de Mapa
         composable<UserScreen.Map> {
             MapScreen()
         }
+        
+        // Pantalla de Búsqueda (placeholder)
         composable<UserScreen.Search> {
             SearchScreen()
         }
+        
+        // Pantalla de lista de lugares
         composable<UserScreen.Places> {
             PlacesScreen(
                 padding = padding,
@@ -58,6 +63,8 @@ fun ContentUser(
                 }
             )
         }
+        
+        // Pantalla de perfil
         composable<UserScreen.Profile> {
             ProfileScreen(
                 usersViewModel = usersViewModel,
@@ -71,6 +78,8 @@ fun ContentUser(
                 }
             )
         }
+        
+        // Pantalla de detalle de lugar
         composable<UserScreen.PlaceDetail> {
             val args = it.toRoute<UserScreen.PlaceDetail>()
             PlaceDetailScreen(
