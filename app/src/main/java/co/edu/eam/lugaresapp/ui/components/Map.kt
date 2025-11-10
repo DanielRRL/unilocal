@@ -8,12 +8,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.mapbox.geojson.Point
+import com.mapbox.maps.MapView
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.extension.compose.annotation.generated.PointAnnotation
 import com.mapbox.maps.extension.compose.annotation.rememberIconImage
 import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.gestures.OnMapClickListener
+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import co.edu.eam.lugaresapp.R
@@ -45,6 +48,7 @@ import co.edu.eam.lugaresapp.model.Place
  * @param initialPitch Inclinación inicial del mapa en grados (0.0 = vista 2D, 60.0 = vista 3D)
  * @param hasLocationPermission Indica si la app tiene permisos de ubicación
  * @param onMarkerClick Callback cuando se hace click en un marcador (recibe el ID del lugar)
+ * @param onMapClick Callback cuando se hace click en el mapa (recibe latitud y longitud)
  * 
  * EJEMPLO DE USO:
  * ```kotlin
@@ -54,7 +58,8 @@ import co.edu.eam.lugaresapp.model.Place
  *     centerLongitude = -75.6491181,
  *     initialZoom = 13.0,
  *     hasLocationPermission = true,
- *     onMarkerClick = { placeId -> navigateToDetail(placeId) }
+ *     onMarkerClick = { placeId -> navigateToDetail(placeId) },
+ *     onMapClick = { lat, lng -> updateLocation(lat, lng) }
  * )
  * ```
  */
@@ -67,7 +72,8 @@ fun Map(
     initialZoom: Double = 13.0,
     initialPitch: Double = 0.0,
     hasLocationPermission: Boolean = false,
-    onMarkerClick: (String) -> Unit = {}
+    onMarkerClick: (String) -> Unit = {},
+    onMapClick: (Double, Double) -> Unit = { _, _ -> }
 ) {
     /**
      * Estado del viewport del mapa
@@ -142,6 +148,19 @@ fun Map(
                     puckBearingEnabled = true
                 }
             }
+        }
+        
+        /**
+         * Configurar listener para clicks en el mapa
+         * Permite selección interactiva de ubicación
+         */
+        MapEffect(key1 = "map_click_listener") { mapView ->
+            val clickListener = OnMapClickListener { point ->
+                // Llamar callback con latitud y longitud
+                onMapClick(point.latitude(), point.longitude())
+                true // Consumir el evento
+            }
+            mapView.mapboxMap.addOnMapClickListener(clickListener)
         }
     }
 }

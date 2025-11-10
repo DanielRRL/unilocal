@@ -105,6 +105,7 @@
     <string name="title_user">Inicio usuario</string>
     <string name="menu_home">Inicio</string>
     <string name="menu_search">Búsqueda</string>
+    <string name="menu_favorites">Favoritos</string>
     <string name="menu_my_places">Mis lugares</string>
     <string name="menu_profile">Perfil</string>
     <string name="title_admin">Inicio administrador</string>

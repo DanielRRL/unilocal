@@ -12,11 +12,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import co.edu.eam.lugaresapp.data.UserLocationManager
 import co.edu.eam.lugaresapp.model.PlaceType
 import co.edu.eam.lugaresapp.ui.components.Map
 import co.edu.eam.lugaresapp.ui.components.PlaceCompactCard
+import co.edu.eam.lugaresapp.utils.LocationUtils
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 
 /**
@@ -51,20 +54,56 @@ fun SearchScreen(
     onNavigateToPlaceDetail: (String) -> Unit = {},
     onNavigateToCreatePlace: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val locationManager = remember { UserLocationManager(context) }
+    
     /**
      * ESTADOS DE FILTROS
      */
     var selectedCategory by remember { mutableStateOf<PlaceType?>(null) }
     var distanceKm by remember { mutableFloatStateOf(5f) } // Distancia en km
     var expandedCategoryDropdown by remember { mutableStateOf(false) }
+    
+    /**
+     * UBICACIÓN DEL USUARIO
+     */
+    var userLocation by remember { mutableStateOf(locationManager.getLastKnownLocation()) }
+    val hasLocationPermission = locationManager.hasLocationPermission()
+    
+    // Actualizar ubicación cuando cambia
+    DisposableEffect(Unit) {
+        if (hasLocationPermission) {
+            locationManager.requestLocationUpdates { location ->
+                userLocation = location
+            }
+        }
+        onDispose {
+            locationManager.removeLocationUpdates()
+        }
+    }
 
     /**
      * OBTENER LUGARES FILTRADOS
      * - Solo lugares aprobados
      * - Filtrados por categoría si está seleccionada
+     * - Filtrados por distancia si hay ubicación del usuario
      */
     val filteredPlaces = placesViewModel.getApprovedPlaces().filter { place ->
-        selectedCategory == null || place.type == selectedCategory
+        val categoryMatch = selectedCategory == null || place.type == selectedCategory
+        
+        val distanceMatch = if (userLocation != null && hasLocationPermission) {
+            val distance = LocationUtils.calculateDistance(
+                userLocation!!.latitude,
+                userLocation!!.longitude,
+                place.location.latitude,
+                place.location.longitude
+            )
+            distance <= distanceKm
+        } else {
+            true // Si no hay ubicación, no filtrar por distancia
+        }
+        
+        categoryMatch && distanceMatch
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -74,10 +113,10 @@ fun SearchScreen(
          */
         Map(
             places = filteredPlaces,
-            centerLatitude = 4.4687891,
-            centerLongitude = -75.6491181,
+            centerLatitude = userLocation?.latitude ?: 4.4687891,
+            centerLongitude = userLocation?.longitude ?: -75.6491181,
             initialZoom = 13.0,
-            hasLocationPermission = false, // TODO: Integrar permisos de ubicación
+            hasLocationPermission = hasLocationPermission,
             onMarkerClick = { placeId ->
                 onNavigateToPlaceDetail(placeId)
             }
@@ -285,8 +324,18 @@ fun SearchScreen(
                         contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
                         items(filteredPlaces.take(5)) { place -> // Mostrar máximo 5 lugares
+                            val distance = if (userLocation != null && hasLocationPermission) {
+                                LocationUtils.calculateDistance(
+                                    userLocation!!.latitude,
+                                    userLocation!!.longitude,
+                                    place.location.latitude,
+                                    place.location.longitude
+                                )
+                            } else null
+                            
                             PlaceCompactCard(
                                 place = place,
+                                distanceText = distance?.let { LocationUtils.formatDistance(it) },
                                 onClick = { onNavigateToPlaceDetail(place.id) }
                             )
                         }

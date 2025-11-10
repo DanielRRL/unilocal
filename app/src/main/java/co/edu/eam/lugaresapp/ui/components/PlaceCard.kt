@@ -220,12 +220,14 @@ fun PlaceCard(
  * 
  * @param place Objeto Place con la información
  * @param modifier Modificador para personalización
+ * @param distanceText Texto opcional de distancia (ej: "2.3 km")
  * @param onClick Callback cuando se hace click
  * 
  * EJEMPLO DE USO:
  * ```kotlin
  * PlaceCompactCard(
  *     place = place,
+ *     distanceText = "2.3 km",
  *     onClick = { navigateToDetail(place.id) }
  * )
  * ```
@@ -234,6 +236,7 @@ fun PlaceCard(
 fun PlaceCompactCard(
     place: Place,
     modifier: Modifier = Modifier,
+    distanceText: String? = null,
     onClick: () -> Unit = {}
 ) {
     Card(
@@ -294,10 +297,14 @@ fun PlaceCompactCard(
                 )
                 
                 /**
-                 * DIRECCIÓN
+                 * DIRECCIÓN O DISTANCIA
                  */
                 Text(
-                    text = "📍 ${place.address}",
+                    text = if (distanceText != null) {
+                        "📍 $distanceText"
+                    } else {
+                        "📍 ${place.address}"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

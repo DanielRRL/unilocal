@@ -6,11 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import co.edu.eam.lugaresapp.ui.user.screens.MapScreen
-import co.edu.eam.lugaresapp.ui.user.screens.PlaceDetailScreen
-import co.edu.eam.lugaresapp.ui.user.screens.PlacesScreen
-import co.edu.eam.lugaresapp.ui.user.screens.ProfileScreen
-import co.edu.eam.lugaresapp.ui.user.screens.SearchScreen
+import co.edu.eam.lugaresapp.ui.user.screens.*
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
@@ -88,17 +84,40 @@ fun ContentUser(
         }
         
         /**
-         * PANTALLA DE PERFIL
-         * Información del usuario, lugares creados, reseñas, etc.
+         * PANTALLA DE FAVORITOS
+         * Muestra todos los lugares marcados como favoritos por el usuario
          */
-        composable<UserScreen.Profile> {
-            ProfileScreen(
+        composable<UserScreen.Favorites> {
+            FavoritesScreen(
                 usersViewModel = usersViewModel,
                 placesViewModel = placesViewModel,
                 reviewsViewModel = reviewsViewModel,
                 onNavigateToPlaceDetail = { placeId ->
                     navController.navigate(UserScreen.PlaceDetail(placeId))
-                },
+                }
+            )
+        }
+        
+        /**
+         * PANTALLA DE MIS LUGARES
+         * Muestra lugares creados por el usuario con sus estados
+         */
+        composable<UserScreen.MyPlaces> {
+            MyPlacesScreen(
+                placesViewModel = placesViewModel,
+                onNavigateToPlaceDetail = { placeId ->
+                    navController.navigate(UserScreen.PlaceDetail(placeId))
+                }
+            )
+        }
+        
+        /**
+         * PANTALLA DE PERFIL
+         * Información del usuario con opción de editar datos
+         */
+        composable<UserScreen.Profile> {
+            ProfileScreen(
+                usersViewModel = usersViewModel,
                 onLogout = {
                     // La navegación al login se manejará desde Navigation.kt
                 }

@@ -218,12 +218,18 @@ fun CreatePlaceScreen(
             /**
              * MAPA INTERACTIVO
              * Muestra la ubicación seleccionada en el mapa
-             * TODO: Implementar selección interactiva de coordenadas
+             * Click en el mapa actualiza las coordenadas GPS
              */
             Text(
                 text = "Ubicación en el mapa",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold
+            )
+            
+            Text(
+                text = "Haz click en el mapa para seleccionar la ubicación exacta",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Box(
@@ -237,14 +243,24 @@ fun CreatePlaceScreen(
                     centerLongitude = longitude,
                     initialZoom = 15.0,
                     hasLocationPermission = false,
-                    onMarkerClick = {}
+                    onMarkerClick = {},
+                    onMapClick = { lat, lng ->
+                        latitude = lat
+                        longitude = lng
+                        Toast.makeText(
+                            context,
+                            "Ubicación actualizada",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 )
             }
 
             Text(
-                text = "Coordenadas: ${latitude.format(6)}, ${longitude.format(6)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "📍 Coordenadas: ${latitude.format(6)}, ${longitude.format(6)}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
 
             Divider()

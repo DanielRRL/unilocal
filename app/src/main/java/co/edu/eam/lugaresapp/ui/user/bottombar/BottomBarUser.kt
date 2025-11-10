@@ -1,10 +1,7 @@
 package co.edu.eam.lugaresapp.ui.user.bottombar
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -20,7 +17,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import co.edu.eam.lugaresapp.R
 import co.edu.eam.lugaresapp.ui.user.nav.UserScreen
 
-
+/**
+ * BARRA DE NAVEGACIÓN INFERIOR DE USUARIO
+ * 
+ * Muestra 4 opciones principales:
+ * - Inicio: Mapa con lugares
+ * - Favoritos: Lugares favoritos del usuario
+ * - Mis Lugares: Lugares creados por el usuario
+ * - Perfil: Información del usuario
+ * 
+ * NOTA: Búsqueda se mantiene separada y se accede desde el mapa
+ */
 @Composable
 fun BottomBarUser(
     navController: NavHostController,
@@ -58,9 +65,6 @@ fun BottomBarUser(
                         }
                         launchSingleTop = true
                         restoreState = true
-
-                        //showTopBar(destination.showTopBar)
-                        //titleTopBar(destination.label)
                     }
                 },
                 icon = {
@@ -72,19 +76,22 @@ fun BottomBarUser(
                 selected = isSelected
             )
         }
-
-
     }
 }
 
+/**
+ * DESTINOS DE LA NAVEGACIÓN INFERIOR
+ * 
+ * Define las 4 pantallas principales accesibles desde la barra inferior
+ */
 enum class Destination(
     val route: UserScreen,
     val label: Int,
     val icon: ImageVector,
     val showTopBar: Boolean = true
 ){
-    HOME(UserScreen.Map, R.string.menu_home, Icons.Default.Home ),
-    SEARCH(UserScreen.Search, R.string.menu_search, Icons.Default.Search, false),
-    MY_PLACES(UserScreen.Places, R.string.menu_my_places, Icons.Default.Place),
+    HOME(UserScreen.Map, R.string.menu_home, Icons.Default.Home, false),
+    FAVORITES(UserScreen.Favorites, R.string.menu_favorites, Icons.Default.Favorite),
+    MY_PLACES(UserScreen.MyPlaces, R.string.menu_my_places, Icons.Default.Place),
     PROFILE(UserScreen.Profile, R.string.menu_profile, Icons.Default.AccountCircle)
 }
