@@ -58,10 +58,19 @@ fun ContentUser(
         
         /**
          * PANTALLA DE BÚSQUEDA
-         * Funcionalidad de búsqueda de lugares (placeholder)
+         * Permite buscar lugares por categoría y distancia
+         * Muestra mapa de fondo con resultados filtrados
          */
         composable<UserScreen.Search> {
-            SearchScreen()
+            SearchScreen(
+                placesViewModel = placesViewModel,
+                onNavigateToPlaceDetail = { placeId ->
+                    navController.navigate(UserScreen.PlaceDetail(placeId))
+                },
+                onNavigateToCreatePlace = {
+                    // TODO: Navegar a CreatePlaceScreen cuando esté integrada
+                }
+            )
         }
         
         /**

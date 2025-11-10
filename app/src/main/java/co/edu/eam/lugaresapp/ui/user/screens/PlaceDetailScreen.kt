@@ -223,7 +223,7 @@ fun PlaceDetailScreen(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = place.type.name,
+                    text = place.type.displayName,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelLarge
                 )

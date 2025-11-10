@@ -162,7 +162,7 @@ fun PlaceCard(
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = place.type.name,
+                        text = place.type.displayName,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
@@ -288,7 +288,7 @@ fun PlaceCompactCard(
                  * CATEGORÍA
                  */
                 Text(
-                    text = place.type.name,
+                    text = place.type.displayName,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )

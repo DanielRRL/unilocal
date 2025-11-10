@@ -118,7 +118,7 @@ fun PlacesScreen(
                             FilterChip(
                                 selected = selectedType == type,
                                 onClick = { selectedType = if (selectedType == type) null else type },
-                                label = { Text(type.name) }
+                                label = { Text(type.displayName) }
                             )
                         }
                     }
@@ -227,7 +227,7 @@ fun PlacesScreen(
                                 Text(text = place.description)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Tipo: ${place.type.name}",
+                                    text = "Tipo: ${place.type.displayName}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )

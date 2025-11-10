@@ -82,7 +82,7 @@ fun Map(
             zoom(initialZoom)
             
             // Inclinación de la cámara (0.0 = vista cenital, 60.0 = perspectiva)
-            pitch(initialPitch)
+            pitch(45.0)
         }
     }
 
