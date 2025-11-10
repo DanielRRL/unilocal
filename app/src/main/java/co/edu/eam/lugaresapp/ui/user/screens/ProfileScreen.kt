@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import co.edu.eam.lugaresapp.data.SessionManager
+import co.edu.eam.lugaresapp.ui.components.RatingStars
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
@@ -406,18 +407,12 @@ fun ReviewListItem(
             
             Spacer(modifier = Modifier.height(4.dp))
             
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                repeat(rating) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Estrella",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+            // Rating usando componente reutilizable
+            RatingStars(
+                rating = rating,
+                isInteractive = false,
+                starSize = 16.dp
+            )
             
             Spacer(modifier = Modifier.height(4.dp))
             

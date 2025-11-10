@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import co.edu.eam.lugaresapp.data.SessionManager
 import co.edu.eam.lugaresapp.model.Review
+import co.edu.eam.lugaresapp.ui.components.RatingStars
+import co.edu.eam.lugaresapp.ui.components.RatingStarsWithValue
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
@@ -205,29 +207,13 @@ fun PlaceDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Rating promedio
+            // Rating promedio - Usando componente RatingStarsWithValue
             if (reviewCount > 0) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Rating",
-                        tint = Color(0xFFFFC107),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = String.format("%.1f", averageRating),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "($reviewCount reseñas)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
-                }
+                RatingStarsWithValue(
+                    rating = averageRating,
+                    reviewCount = reviewCount,
+                    starSize = 24.dp
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -372,27 +358,18 @@ fun PlaceDetailScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Selector de estrellas
+                    // Selector de estrellas - Usando componente RatingStars
                     Text(
                         text = "Calificación",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        for (i in 1..5) {
-                            IconButton(
-                                onClick = { reviewRating = i }
-                            ) {
-                                Icon(
-                                    imageVector = if (i <= reviewRating) Icons.Filled.Star else Icons.Outlined.Star,
-                                    contentDescription = "$i estrella",
-                                    tint = if (i <= reviewRating) Color(0xFFFFC107) else Color.Gray
-                                )
-                            }
-                        }
-                    }
+                    RatingStars(
+                        rating = reviewRating,
+                        isInteractive = true,
+                        starSize = 32.dp,
+                        onRatingChange = { newRating -> reviewRating = newRating }
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -636,19 +613,12 @@ fun ReviewCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Rating
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                repeat(review.rating) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Estrella",
-                        tint = Color(0xFFFFC107),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            // Rating - Usando componente RatingStars
+            RatingStars(
+                rating = review.rating,
+                isInteractive = false,
+                starSize = 20.dp
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
