@@ -43,28 +43,45 @@ fun ContentUser(
         navController = navController,
         startDestination = UserScreen.Map
     ){
-        // Pantalla de Mapa
+        /**
+         * PANTALLA DE MAPA
+         * Muestra todos los lugares aprobados en un mapa interactivo
+         */
         composable<UserScreen.Map> {
-            MapScreen()
-        }
-        
-        // Pantalla de Búsqueda (placeholder)
-        composable<UserScreen.Search> {
-            SearchScreen()
-        }
-        
-        // Pantalla de lista de lugares
-        composable<UserScreen.Places> {
-            PlacesScreen(
-                padding = padding,
+            MapScreen(
                 placesViewModel = placesViewModel,
-                onNavigateToPlaceDetail = {
-                    navController.navigate(UserScreen.PlaceDetail(it))
+                onNavigateToPlaceDetail = { placeId ->
+                    navController.navigate(UserScreen.PlaceDetail(placeId))
                 }
             )
         }
         
-        // Pantalla de perfil
+        /**
+         * PANTALLA DE BÚSQUEDA
+         * Funcionalidad de búsqueda de lugares (placeholder)
+         */
+        composable<UserScreen.Search> {
+            SearchScreen()
+        }
+        
+        /**
+         * PANTALLA DE LISTA DE LUGARES
+         * Vista de lista con filtros de búsqueda
+         */
+        composable<UserScreen.Places> {
+            PlacesScreen(
+                padding = padding,
+                placesViewModel = placesViewModel,
+                onNavigateToPlaceDetail = { placeId ->
+                    navController.navigate(UserScreen.PlaceDetail(placeId))
+                }
+            )
+        }
+        
+        /**
+         * PANTALLA DE PERFIL
+         * Información del usuario, lugares creados, reseñas, etc.
+         */
         composable<UserScreen.Profile> {
             ProfileScreen(
                 usersViewModel = usersViewModel,
@@ -79,7 +96,10 @@ fun ContentUser(
             )
         }
         
-        // Pantalla de detalle de lugar
+        /**
+         * PANTALLA DE DETALLE DE LUGAR
+         * Información completa de un lugar específico
+         */
         composable<UserScreen.PlaceDetail> {
             val args = it.toRoute<UserScreen.PlaceDetail>()
             PlaceDetailScreen(

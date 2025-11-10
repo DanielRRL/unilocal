@@ -14,45 +14,60 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.mapbox.geojson.Point
-import com.mapbox.maps.extension.compose.MapboxMap
-import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
-import com.mapbox.maps.extension.compose.annotation.generated.PointAnnotation
-import com.mapbox.maps.extension.compose.style.MapStyle
-import com.mapbox.maps.extension.compose.MapEffect
-import com.mapbox.maps.plugin.PuckBearing
-import com.mapbox.maps.plugin.locationcomponent.location
+import co.edu.eam.lugaresapp.ui.components.Map
+import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 
 /**
  * PANTALLA DE MAPA - UniLocal
  * 
- * Muestra un mapa interactivo con la ubicación de los lugares registrados.
+ * Pantalla que muestra todos los lugares aprobados en un mapa interactivo.
  * Utiliza Mapbox Maps SDK para Android con Jetpack Compose.
  * 
  * CARACTERÍSTICAS IMPLEMENTADAS:
- * - Mapa centrado en Armenia, Quindío, Colombia
- * - Permisos de ubicación con manejo correcto
- * - Marcador en ubicación central (Plaza de Bolívar)
- * - Integración con ViewModels para mostrar lugares aprobados
+ * - Mapa centrado en Armenia, Quindío, Colombia (Plaza de Bolívar)
+ * - Gestión de permisos de ubicación con feedback visual
+ * - Marcadores interactivos para cada lugar aprobado
+ * - Click en marcador navega al detalle del lugar
+ * - Ubicación del usuario en tiempo real (si hay permisos)
  * - UI/UX responsiva con Material Design 3
  * 
- * NOTA FASE 2:
- * Esta es una implementación básica con datos simulados.
- * En Fase 3 se integrará con GPS real y ubicaciones de Firebase.
+ * ARQUITECTURA:
+ * - Sigue principio de Separación de Responsabilidades
+ * - MapScreen gestiona: estado de UI, permisos, navegación
+ * - Componente Map gestiona: renderizado del mapa, marcadores
+ * - PlacesViewModel proporciona: datos de lugares
+ * 
+ * FLUJO DE PERMISOS:
+ * 1. Al montar: Verifica permisos de ubicación
+ * 2. Si no hay: Muestra card con botón para solicitar
+ * 3. Usuario acepta: Activa ubicación en el mapa
+ * 4. Usuario rechaza: Mapa funciona sin ubicación del usuario
  * 
  * UBICACIÓN CENTRAL:
  * - Latitud: 4.4687891
  * - Longitud: -75.6491181
- * - Lugar: Plaza de Bolívar, Armenia, Quindío
+ * - Lugar: Plaza de Bolívar, Armenia, Quindío, Colombia
+ * 
+ * @param placesViewModel ViewModel que proporciona lista de lugares
+ * @param onNavigateToPlaceDetail Callback para navegar al detalle de un lugar
  * 
  * @see <a href="https://docs.mapbox.com/android/maps/guides/">Mapbox Android Documentation</a>
  */
 @Composable
-fun MapScreen() {
-    // Contexto de la aplicación
+fun MapScreen(
+    placesViewModel: PlacesViewModel,
+    onNavigateToPlaceDetail: (String) -> Unit = {}
+) {
+    /**
+     * Contexto de la aplicación
+     * Necesario para verificar y solicitar permisos
+     */
     val context = LocalContext.current
     
-    // Estado de permisos de ubicación
+    /**
+     * Estado de permisos de ubicación
+     * Verifica si el permiso ACCESS_FINE_LOCATION está concedido
+     */
     var hasLocationPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -62,71 +77,77 @@ fun MapScreen() {
         )
     }
     
-    // Launcher para solicitar permisos
+    /**
+     * Launcher para solicitar permisos
+     * Contrato ActivityResultContracts.RequestPermission() maneja la solicitud
+     */
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        // Actualizar estado cuando el usuario responde
         hasLocationPermission = isGranted
+        
+        // Feedback visual mediante Toast
         Toast.makeText(
             context,
-            if (isGranted) "Permiso de ubicación concedido" else "Permiso de ubicación denegado",
+            if (isGranted) "✓ Permiso de ubicación concedido" else "✗ Permiso de ubicación denegado",
             Toast.LENGTH_SHORT
         ).show()
     }
     
-    // Estado del viewport del mapa
-    val mapViewportState = rememberMapViewportState {
-        setCameraOptions {
-            // Centrar en Armenia, Quindío, Colombia
-            center(Point.fromLngLat(-75.6491181, 4.4687891))
-            zoom(13.0) // Zoom apropiado para ver la ciudad
-            pitch(0.0) // Vista 2D sin inclinación
-        }
-    }
+    /**
+     * Obtener lugares aprobados del ViewModel
+     * Solo los lugares con approved=true se muestran en el mapa
+     */
+    val approvedPlaces = placesViewModel.getApprovedPlaces()
     
-    // Solicitar permisos al iniciar
+    /**
+     * Efecto secundario: Solicitar permisos al iniciar
+     * LaunchedEffect con Unit se ejecuta solo una vez al montar
+     */
     LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
             permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
     
-    // UI Principal
+    /**
+     * UI PRINCIPAL
+     * Box permite superponer elementos (mapa + overlays)
+     */
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Componente del mapa Mapbox
-            MapboxMap(
-                modifier = Modifier.fillMaxSize(),
-                mapViewportState = mapViewportState,
-                style = {
-                    // Estilo del mapa: Streets (calles)
-                    MapStyle(style = "mapbox://styles/mapbox/streets-v12")
-                }
-            ) {
-                // Marcador central en Plaza de Bolívar
-                PointAnnotation(
-                    point = Point.fromLngLat(-75.6491181, 4.4687891)
-                ) {
-                    // Configuración del marcador
-                    // En producción aquí se agregarían marcadores dinámicos
-                    // basados en placesViewModel.getApprovedPlaces()
-                }
+            /**
+             * COMPONENTE DE MAPA
+             * Renderiza el mapa con todos los lugares aprobados
+             */
+            Map(
+                // Lugares a mostrar como marcadores
+                places = approvedPlaces,
                 
-                // Configuración de ubicación del usuario
-                if (hasLocationPermission) {
-                    // MapEffect para configurar el "puck" de ubicación
-                    // Esto mostrará la ubicación actual del usuario en el mapa
-                    MapEffect(key1 = "location_puck") { mapView ->
-                        mapView.location.updateSettings {
-                            enabled = true
-                            puckBearing = PuckBearing.COURSE
-                            puckBearingEnabled = true
-                        }
-                    }
+                // Centro: Plaza de Bolívar, Armenia, Quindío
+                centerLatitude = 4.4687891,
+                centerLongitude = -75.6491181,
+                
+                // Zoom apropiado para ver la ciudad completa
+                initialZoom = 13.0,
+                
+                // Vista 2D sin inclinación
+                initialPitch = 0.0,
+                
+                // Habilitar ubicación del usuario si hay permisos
+                hasLocationPermission = hasLocationPermission,
+                
+                // Callback cuando se hace click en un marcador
+                onMarkerClick = { placeId ->
+                    onNavigateToPlaceDetail(placeId)
                 }
-            }
+            )
             
-            // Overlay superior con información
+            /**
+             * OVERLAY SUPERIOR: Información del mapa
+             * Card semitransparente en la parte superior
+             */
             Card(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -138,29 +159,56 @@ fun MapScreen() {
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    /**
+                     * TÍTULO DEL MAPA
+                     */
                     Text(
                         text = "🗺️ Mapa de Lugares",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    /**
+                     * UBICACIÓN CENTRAL
+                     */
                     Text(
                         text = "Armenia, Quindío",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    // Indicador de permisos
+                    /**
+                     * CONTADOR DE LUGARES
+                     */
+                    Text(
+                        text = "${approvedPlaces.size} ${if (approvedPlaces.size == 1) "lugar" else "lugares"} disponibles",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    /**
+                     * INDICADOR DE PERMISOS
+                     * Solo se muestra si no hay permisos concedidos
+                     */
                     if (!hasLocationPermission) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
                         Text(
                             text = "⚠️ Permiso de ubicación requerido",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
                         )
+                        
                         Spacer(modifier = Modifier.height(4.dp))
+                        
+                        /**
+                         * BOTÓN PARA SOLICITAR PERMISOS
+                         */
                         Button(
                             onClick = {
                                 permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -172,11 +220,24 @@ fun MapScreen() {
                         ) {
                             Text("Conceder Permiso")
                         }
+                    } else {
+                        /**
+                         * INDICADOR DE PERMISOS CONCEDIDOS
+                         */
+                        Text(
+                            text = "✓ Ubicación en tiempo real activada",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
             
-            // Nota informativa en la parte inferior
+            /**
+             * OVERLAY INFERIOR: Instrucciones
+             * Card semitransparente en la parte inferior
+             */
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -186,10 +247,11 @@ fun MapScreen() {
                 )
             ) {
                 Text(
-                    text = "📍 Funcionalidad de mapa disponible en Fase 3 con ubicaciones reales",
+                    text = "� Toca un marcador para ver los detalles del lugar",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(12.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
