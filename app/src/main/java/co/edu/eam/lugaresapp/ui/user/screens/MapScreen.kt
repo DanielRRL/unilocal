@@ -5,9 +5,17 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import co.edu.eam.lugaresapp.ui.components.Map
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
@@ -15,7 +23,9 @@ import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 @Composable
 fun MapScreen(
     placesViewModel: PlacesViewModel,
-    onNavigateToPlaceDetail: (String) -> Unit = {}
+    onNavigateToPlaceDetail: (String) -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
+    onNavigateToCreatePlace: () -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -54,5 +64,50 @@ fun MapScreen(
                 onNavigateToPlaceDetail(placeId)
             }
         )
+        
+        // Botón de búsqueda en la parte superior
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .align(Alignment.TopCenter),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ),
+            shape = RoundedCornerShape(8.dp),
+            onClick = onNavigateToSearch
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Buscar",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Buscar"
+                )
+            }
+        }
+        
+        // Botón flotante para crear lugar
+        FloatingActionButton(
+            onClick = onNavigateToCreatePlace,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Crear lugar",
+                tint = Color.White
+            )
+        }
     }
 }

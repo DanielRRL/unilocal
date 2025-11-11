@@ -48,6 +48,12 @@ fun ContentUser(
                 placesViewModel = placesViewModel,
                 onNavigateToPlaceDetail = { placeId ->
                     navController.navigate(UserScreen.PlaceDetail(placeId))
+                },
+                onNavigateToSearch = {
+                    navController.navigate(UserScreen.Search)
+                },
+                onNavigateToCreatePlace = {
+                    // TODO: Navegar a CreatePlaceScreen cuando esté integrada en la navegación
                 }
             )
         }
