@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import co.edu.eam.lugaresapp.ui.user.screens.*
+import co.edu.eam.lugaresapp.ui.places.CreatePlaceScreen
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.RewiewsViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
@@ -53,7 +54,7 @@ fun ContentUser(
                     navController.navigate(UserScreen.Search)
                 },
                 onNavigateToCreatePlace = {
-                    // TODO: Navegar a CreatePlaceScreen cuando esté integrada en la navegación
+                    navController.navigate(UserScreen.CreatePlace)
                 }
             )
         }
@@ -70,7 +71,21 @@ fun ContentUser(
                     navController.navigate(UserScreen.PlaceDetail(placeId))
                 },
                 onNavigateToCreatePlace = {
-                    // TODO: Navegar a CreatePlaceScreen cuando esté integrada
+                    navController.navigate(UserScreen.CreatePlace)
+                }
+            )
+        }
+        
+        /**
+         * PANTALLA DE CREAR LUGAR
+         * Formulario completo para crear un nuevo lugar
+         */
+        composable<UserScreen.CreatePlace> {
+            CreatePlaceScreen(
+                placesViewModel = placesViewModel,
+                usersViewModel = usersViewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }

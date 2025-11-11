@@ -26,6 +26,9 @@ sealed class UserScreen {
     
     @Serializable
     data object MyPlaces : UserScreen()
+    
+    @Serializable
+    data object CreatePlace : UserScreen()
 
     @Serializable
     data class PlaceDetail(val id: String) : UserScreen()
