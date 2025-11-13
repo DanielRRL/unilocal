@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package co.edu.eam.lugaresapp.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +22,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import co.edu.eam.lugaresapp.R
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DropdownMenu(
     label: String,

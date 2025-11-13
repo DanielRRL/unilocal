@@ -1,11 +1,18 @@
 package co.edu.eam.lugaresapp.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.edu.eam.lugaresapp.model.Role
 import co.edu.eam.lugaresapp.model.User
+import co.edu.eam.lugaresapp.utils.RequestResult
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 
 /**
  * VIEWMODEL DE USUARIOS uniLocal
@@ -52,47 +59,102 @@ class UsersViewModel: ViewModel(){
      */
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
+    private val _reportResult = MutableStateFlow<RequestResult?>(null)
+    val reportResult: StateFlow<RequestResult?> = _reportResult.asStateFlow()
+
+
+    val db = Firebase.firestore
+
+
     /**
      * INICIALIZADOR DEL VIEWMODEL
      * 
      * init {} se ejecuta cuando se crea una instancia del ViewModel.
-     * Aquí cargamos los datos iniciales de usuarios.
+     * Aquí cargamos los datos iniciales de usuarios desde Firebase Firestore.
      */
     init {
         loadUsers()
     }
 
+    // ==================== FUNCIONES DE SEGURIDAD ====================
+    
     /**
-     * CARGA DE USUARIOS INICIALES
+     * HASH DE CONTRASEÑA USANDO SHA-256
      * 
-     * Esta función simula la carga de usuarios desde una base de datos o API.
-     * En una app real, aquí haríamos llamadas a un repositorio o servicio web.
+     * Convierte la contraseña en texto plano a un hash seguro de 64 caracteres.
      * 
-     * USUARIOS DE PRUEBA:
-     * - admin@email.com / 123456 (ADMIN)
-     * - carlos@email.com / 123456 (USER)
+     * FUNCIONAMIENTO:
+     * - Usa el algoritmo SHA-256 (Secure Hash Algorithm 256-bit)
+     * - Convierte el hash binario a hexadecimal
+     * - El hash es irreversible (no se puede obtener la contraseña original)
+     * 
+     * SEGURIDAD:
+     * - SHA-256 es un algoritmo criptográfico seguro
+     * - Mismo input siempre produce mismo output (determinístico)
+     * - No se puede revertir el hash a la contraseña original
+     * - Dos contraseñas diferentes producen hashes completamente diferentes
+     * 
+     * @param password String - Contraseña en texto plano
+     * @return String - Hash SHA-256 de 64 caracteres en hexadecimal
+     * 
+     * EJEMPLO:
+     * ```
+     * hashPassword("miPassword123") 
+     * // Retorna: "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
+     * ```
      */
-    fun loadUsers(){
-        _users.value = listOf(
-            User(
-                id = "1",
-                name = "Admin",
-                username = "admin", 
-                role = Role.ADMIN,          // Usuario administrador
-                city = "Armenia",
-                email = "admin@email.com",
-                password = "123456"        
-            ),
-            User(
-                id = "2",
-                name = "Daniel",
-                username = "danielf",
-                role = Role.USER,           // Usuario normal
-                city = "Armenia", 
-                email = "daniel@email.com",
-                password = "123456"         
-            )
-        )
+    fun hashPassword(password: String): String {
+        val bytes = password.toByteArray()
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(bytes)
+        return digest.fold("") { str, it -> str + "%02x".format(it) }
+    }
+
+    /**
+     * CARGA DE USUARIOS DESDE FIREBASE FIRESTORE
+     * 
+     * Esta función carga todos los usuarios existentes desde Firebase al iniciar la app.
+     * 
+     * FUNCIONAMIENTO:
+     * - Se ejecuta en una coroutine (viewModelScope) para operación asíncrona
+     * - Consulta la colección "users" en Firestore
+     * - Usa addSnapshotListener para escuchar cambios en tiempo real
+     * - Convierte los documentos de Firebase a objetos User usando toObject()
+     * - Actualiza el StateFlow _users con la lista obtenida
+     * - Maneja errores con try-catch y logging
+     * 
+     * SNAPSHOT LISTENER:
+     * - Escucha cambios en la colección en tiempo real
+     * - Se ejecuta automáticamente cuando hay cambios en Firebase
+     * - Primera ejecución: carga datos iniciales
+     * - Siguientes ejecuciones: actualiza cuando otros dispositivos modifican datos
+     * 
+     * MAPEO AUTOMÁTICO:
+     * - Firebase usa toObject<User>() para mapear documentos a data classes
+     * - Requiere que User tenga constructor sin argumentos (valores por defecto)
+     * - Los nombres de campos en Firebase deben coincidir con las propiedades de User
+     * 
+     * LOGGING:
+     * - Log.d() para éxito: muestra cantidad de usuarios cargados
+     * - Log.e() para errores: muestra mensaje de error con stack trace
+     */
+    private fun loadUsers(){
+        viewModelScope.launch {
+            db.collection("users")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("UsersViewModel", "Error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    
+                    if (snapshot != null) {
+                        val usersList = snapshot.documents.mapNotNull { 
+                            doc -> doc.toObject(User::class.java)
+                        }
+                        _users.value = usersList
+                    }
+                }
+        }
     }
 
     /**
@@ -108,8 +170,65 @@ class UsersViewModel: ViewModel(){
      * 
      * @param user: User - El nuevo usuario a añadir
      */
+
+    /**
+     * CREACIÓN DE NUEVO USUARIO EN FIREBASE
+     * 
+     * Esta función guarda un nuevo usuario en Firebase Firestore de forma asíncrona.
+     * 
+     * FUNCIONAMIENTO:
+     * - Se ejecuta en una coroutine (viewModelScope) para no bloquear el hilo principal
+     * - Actualiza _reportResult con el estado de la operación (Loading/Success/Failure)
+     * - Usa runCatching para capturar y manejar errores de forma elegante
+     * - Llama a createFirebase() que realiza la operación de guardado
+     * 
+     * ESTADOS DE _reportResult:
+     * - RequestResult.Loading: Operación en progreso
+     * - RequestResult.Success: Usuario guardado exitosamente en Firebase
+     * - RequestResult.Failure: Error al guardar (contiene mensaje de error)
+     * 
+     * @param user User - El usuario a guardar en Firebase Firestore
+     * 
+     * NOTA: Esta función es asíncrona y no bloquea la ejecución
+     */
     fun create(user: User){
-        _users.value = _users.value + user // Concatena el nuevo usuario a la lista existente
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            
+            try {
+                createFirebase(user)
+                _users.value = _users.value + user
+                _reportResult.value = RequestResult.Success("Usuario guardado")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al guardar usuario")
+                android.util.Log.e("UsersViewModel", "Error al guardar usuario: ${e.message}", e)
+            }
+        }
+    }
+    
+    /**
+     * GUARDADO DE USUARIO EN FIREBASE FIRESTORE
+     * 
+     * Función suspendida que guarda el usuario en la colección "users" de Firestore.
+     * 
+     * FUNCIONAMIENTO:
+     * - Usa el ID del usuario como ID del documento (para evitar duplicados)
+     * - set() sobrescribe el documento si existe, o lo crea si no existe
+     * - await() suspende la coroutine hasta que la operación termine
+     * 
+     * VENTAJAS DE USAR set() CON ID ESPECÍFICO:
+     * - Evita documentos duplicados
+     * - Permite actualizar el usuario usando el mismo ID
+     * - Facilita la búsqueda y gestión de documentos
+     * 
+     * @param user User - El usuario a guardar
+     * @throws Exception si hay error de conexión o permisos
+     */
+    private suspend fun createFirebase(user: User){
+        db.collection("users")
+            .document(user.id)
+            .set(user)
+            .await()
     }
 
     /**
@@ -144,57 +263,39 @@ class UsersViewModel: ViewModel(){
      * Esta es la función principal de autenticación de la aplicación.
      * 
      * FUNCIONAMIENTO:
-     * - Busca un usuario que tenga el email Y la contraseña correctos
+     * - Hashea la contraseña ingresada usando SHA-256
+     * - Busca un usuario que tenga el email Y el hash de contraseña correctos
      * - Retorna el usuario si las credenciales son válidas
      * - Retorna null si las credenciales son incorrectas
      * 
-     * @param email: String - Email del usuario
-     * @param password: String - Contraseña del usuario
+     * SEGURIDAD:
+     * - NUNCA compara contraseñas en texto plano
+     * - Hashea la contraseña ingresada y compara hashes
+     * - Los hashes son irreversibles (no se puede obtener la contraseña original)
+     * - Mismo input siempre produce mismo hash (determinístico)
+     * 
+     * @param email String - Email del usuario
+     * @param password String - Contraseña del usuario (será hasheada antes de comparar)
      * @return User? - Usuario autenticado o null si las credenciales son incorrectas
+     * 
+     * EJEMPLO DE USO:
+     * ```
+     * val user = usersViewModel.login("daniel@email.com", "miPassword123")
+     * if (user != null) {
+     *     // Login exitoso, navegar a pantalla principal
+     *     sessionManager.saveSession(user.id, user.role)
+     * } else {
+     *     // Credenciales incorrectas
+     *     Toast.makeText(context, "Email o contraseña incorrectos", Toast.LENGTH_SHORT).show()
+     * }
+     * ```
      */
     fun login(email: String, password: String): User?{
-        return _users.value.find { it.email == email && it.password == password }
-    }
-
-    /**
-     * CREACIÓN DE USUARIO DESDE FORMULARIO DE REGISTRO
-     * 
-     * Esta función maneja la lógica de registro de nuevos usuarios.
-     * Incluye validación de email duplicado y generación de ID único.
-     * 
-     * VALIDACIONES:
-     * - Verifica que el email no esté ya registrado
-     * - Genera un ID único usando UUID
-     * - Asigna rol USER por defecto
-     * - Añade el usuario a la lista
-     * 
-     * @param name: String - Nombre del usuario
-     * @param lastname: String - Apellido del usuario  
-     * @param email: String - Email del usuario (debe ser único)
-     * @param phone: String - Teléfono del usuario
-     * @param password: String - Contraseña del usuario
-     * @return Boolean - true si el registro fue exitoso, false si el email ya existe
-     */
-    fun createUser(name: String, lastname: String, email: String, phone: String, password: String): Boolean {
-        // Verificar si el email ya está registrado
-        if (_users.value.any { it.email == email }) {
-            return false // Email duplicado, registro fallido
-        }
+        // Hashear la contraseña ingresada para comparar con la almacenada
+        val hashedPassword = hashPassword(password)
         
-        // Crear nuevo usuario con datos del formulario
-        val newUser = User(
-            id = java.util.UUID.randomUUID().toString(), // Genera ID único usando UUID
-            name = "$name $lastname",        // Combina nombre y apellido  
-            username = email,               // Usa email como username por simplicidad
-            role = Role.USER,               // Todos los nuevos usuarios son USER (no ADMIN)
-            city = "Armenia",               // Ciudad por defecto  
-            email = email,                  // Email único del usuario
-            password = password             // En producción esto se hashearía
-        )
-        
-        // Añadir el nuevo usuario a la lista
-        _users.value = _users.value + newUser
-        return true // Registro exitoso
+        // Buscar usuario con email Y hash de contraseña coincidentes
+        return _users.value.find { it.email == email && it.password == hashedPassword }
     }
 
     // ==================== GESTIÓN DE FAVORITOS ====================
@@ -296,7 +397,7 @@ class UsersViewModel: ViewModel(){
      * 
      * FUNCIONAMIENTO:
      * - Busca el usuario por ID
-     * - Actualiza solo los campos permitidos: name, username, city
+     * - Actualiza solo los campos permitidos: name, username, phone, department, city
      * - Mantiene sin cambios: id, email, password, role, favorites
      * - Usa copy() para crear una nueva instancia inmutable
      * - Actualiza el StateFlow completo para notificar cambios a la UI
@@ -304,6 +405,8 @@ class UsersViewModel: ViewModel(){
      * CAMPOS EDITABLES:
      * - name: Nombre completo del usuario
      * - username: Nombre de usuario único
+     * - phone: Número de teléfono
+     * - department: Departamento de residencia
      * - city: Ciudad de residencia
      * 
      * CAMPOS NO EDITABLES (razones de seguridad):
@@ -313,10 +416,12 @@ class UsersViewModel: ViewModel(){
      * - id: Inmutable por diseño
      * - favorites: Se gestiona con toggleFavorite()
      * 
-     * @param userId: String - ID del usuario a actualizar
-     * @param name: String - Nuevo nombre completo
-     * @param username: String - Nuevo username
-     * @param city: String - Nueva ciudad
+     * @param userId String - ID del usuario a actualizar
+     * @param name String - Nuevo nombre completo
+     * @param username String - Nuevo username
+     * @param phone String - Nuevo número de teléfono
+     * @param department String - Nuevo departamento de residencia
+     * @param city String - Nueva ciudad de residencia
      * 
      * EJEMPLO DE USO:
      * ```
@@ -324,7 +429,9 @@ class UsersViewModel: ViewModel(){
      *     userId = "2",
      *     name = "Daniel Fernando",
      *     username = "danifernando",
-     *     city = "Bogotá"
+     *     phone = "3001234567",
+     *     department = "Quindío",
+     *     city = "Armenia"
      * )
      * ```
      */
@@ -332,6 +439,8 @@ class UsersViewModel: ViewModel(){
         userId: String,
         name: String,
         username: String,
+        phone: String,
+        department: String,
         city: String
     ) {
         _users.value = _users.value.map { user ->
@@ -340,6 +449,8 @@ class UsersViewModel: ViewModel(){
                 user.copy(
                     name = name,
                     username = username,
+                    phone = phone,
+                    department = department,
                     city = city
                     // email, password, role, id, favorites se mantienen sin cambios
                 )

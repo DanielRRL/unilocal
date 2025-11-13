@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "193616454681",
+    "project_id": "mapas-20252-2b50d",
+    "storage_bucket": "mapas-20252-2b50d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:193616454681:android:f3d07d53f3dd63738cf688",
+        "android_client_info": {
+          "package_name": "co.edu.eam.lugaresapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfJV45tY-D_L-S7WESAvybmaUQ8Xud2SE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

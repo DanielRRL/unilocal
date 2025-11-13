@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package co.edu.eam.lugaresapp.ui.user.screens
 
 import android.widget.Toast
@@ -16,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.edu.eam.lugaresapp.R
 import co.edu.eam.lugaresapp.data.SessionManager
+import co.edu.eam.lugaresapp.model.LocationData
 import co.edu.eam.lugaresapp.ui.components.InputText
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
@@ -42,7 +45,6 @@ import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
  * @param usersViewModel ViewModel para gestión de usuarios
  * @param onNavigateBack Callback de navegación hacia atrás
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     usersViewModel: UsersViewModel,
@@ -59,8 +61,29 @@ fun EditProfileScreen(
     // Estados del formulario (inicializados con datos actuales)
     var name by remember { mutableStateOf(currentUser?.name ?: "") }
     var username by remember { mutableStateOf(currentUser?.username ?: "") }
+    var phone by remember { mutableStateOf(currentUser?.phone ?: "") }
+    var department by remember { mutableStateOf(currentUser?.department ?: "") }
     var city by remember { mutableStateOf(currentUser?.city ?: "") }
     val email = currentUser?.email ?: "" // Email NO editable
+    
+    // Estados para dropdowns
+    var departmentExpanded by remember { mutableStateOf(false) }
+    var cityExpanded by remember { mutableStateOf(false) }
+    
+    // Datos de ubicación
+    val departments = LocationData.getDepartments()
+    val cities = if (department.isNotEmpty()) {
+        LocationData.getCitiesByDepartment(department)
+    } else {
+        emptyList()
+    }
+    
+    // Resetear ciudad cuando cambia departamento
+    LaunchedEffect(department) {
+        if (department != currentUser?.department) {
+            city = ""
+        }
+    }
 
     // Si no hay usuario logueado, mostrar mensaje
     if (currentUser == null) {
@@ -135,14 +158,91 @@ fun EditProfileScreen(
                     onValidate = { it.isBlank() }
                 )
 
-                // Campo: Ciudad
+                // Campo: Teléfono
                 InputText(
-                    label = "Ciudad",
+                    label = "Teléfono",
                     supportingText = "* Obligatorio",
-                    value = city,
-                    onValueChange = { city = it },
+                    value = phone,
+                    onValueChange = { phone = it },
                     onValidate = { it.isBlank() }
                 )
+
+                // Dropdown: Departamento
+                ExposedDropdownMenuBox(
+                    expanded = departmentExpanded,
+                    onExpandedChange = { departmentExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = department,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Departamento *") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = departmentExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = departmentExpanded,
+                        onDismissRequest = { departmentExpanded = false }
+                    ) {
+                        departments.forEach { dept ->
+                            DropdownMenuItem(
+                                text = { Text(dept) },
+                                onClick = {
+                                    department = dept
+                                    departmentExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Dropdown: Ciudad
+                ExposedDropdownMenuBox(
+                    expanded = cityExpanded,
+                    onExpandedChange = { 
+                        if (department.isNotEmpty()) {
+                            cityExpanded = it
+                        }
+                    }
+                ) {
+                    OutlinedTextField(
+                        value = city,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ciudad *") },
+                        enabled = department.isNotEmpty(),
+                        trailingIcon = {
+                            if (department.isNotEmpty()) {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = cityExpanded)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = cityExpanded,
+                        onDismissRequest = { cityExpanded = false }
+                    ) {
+                        cities.forEach { cityItem ->
+                            DropdownMenuItem(
+                                text = { Text(cityItem) },
+                                onClick = {
+                                    city = cityItem
+                                    cityExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 // Campo: Email (NO EDITABLE)
                 OutlinedTextField(
@@ -191,10 +291,28 @@ fun EditProfileScreen(
                             return@Button
                         }
                         
+                        if (phone.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                "El teléfono es obligatorio",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+                        
+                        if (department.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                "Debe seleccionar un departamento",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+                        
                         if (city.isBlank()) {
                             Toast.makeText(
                                 context,
-                                "La ciudad es obligatoria",
+                                "Debe seleccionar una ciudad",
                                 Toast.LENGTH_SHORT
                             ).show()
                             return@Button
@@ -206,7 +324,9 @@ fun EditProfileScreen(
                             userId = currentUser.id,
                             name = name.trim(),
                             username = username.trim(),
-                            city = city.trim()
+                            phone = phone.trim(),
+                            department = department,
+                            city = city
                         )
                         
                         // Feedback exitoso

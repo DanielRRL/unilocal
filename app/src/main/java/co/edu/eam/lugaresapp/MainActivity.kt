@@ -1,6 +1,7 @@
 package co.edu.eam.lugaresapp
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,6 +11,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import co.edu.eam.lugaresapp.ui.navigation.AppNavigation
 import co.edu.eam.lugaresapp.ui.theme.LugaresAppTheme
+import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.FirebaseFirestore
 
 /**
  * ACTIVIDAD PRINCIPAL uniLocal
@@ -41,6 +44,25 @@ class MainActivity : ComponentActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState) // Llamada obligatoria al método padre
+        
+        // ==================== INICIALIZACIÓN DE FIREBASE ====================
+        
+        try {
+            // Inicializar Firebase App explícitamente
+            FirebaseApp.initializeApp(this)
+            Log.d("MainActivity", "✅ Firebase inicializado correctamente")
+            
+            // Verificar conexión a Firestore
+            val db = FirebaseFirestore.getInstance()
+            Log.d("MainActivity", "✅ Firestore instance obtenida: ${db.app.name}")
+            
+            // Habilitar logging de Firestore para debugging
+            FirebaseFirestore.setLoggingEnabled(true)
+            Log.d("MainActivity", "✅ Firestore logging habilitado")
+            
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ ERROR al inicializar Firebase: ${e.message}", e)
+        }
         
         /**
          * HABILITACIÓN DE EDGE-TO-EDGE
