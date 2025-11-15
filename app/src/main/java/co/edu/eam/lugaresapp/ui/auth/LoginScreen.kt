@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import co.edu.eam.lugaresapp.R
+import co.edu.eam.lugaresapp.utils.RequestResult
 import co.edu.eam.lugaresapp.data.SessionManager
 import co.edu.eam.lugaresapp.ui.components.InputText
 import co.edu.eam.lugaresapp.ui.navigation.RouteScreen
@@ -80,6 +81,56 @@ fun LoginScreen(
     var errorMessage by remember { mutableStateOf("") }    // Mensaje de error general
     var emailError by remember { mutableStateOf("") }      // Mensaje de error específico del email
     var passwordError by remember { mutableStateOf("") }   // Mensaje de error específico de la contraseña
+    
+    // Observar el usuario actual desde StateFlow
+    val currentUser by usersViewModel.currentUser.collectAsState()
+    val reportResult by usersViewModel.reportResult.collectAsState()
+    
+    /**
+     * EFECTO PARA MANEJAR RESULTADO DE LOGIN
+     * 
+     * Observa cambios en reportResult para manejar loading, éxito y error.
+     */
+    LaunchedEffect(reportResult) {
+        when (val result = reportResult) {
+            is RequestResult.Loading -> {
+                isLoading = true
+                errorMessage = ""
+            }
+            is RequestResult.Success -> {
+                isLoading = false
+                // La navegación se maneja en el efecto de currentUser
+            }
+            is RequestResult.Failure -> {
+                isLoading = false
+                errorMessage = result.errorMessage
+            }
+            else -> {}
+        }
+    }
+    
+    /**
+     * EFECTO CUANDO LOGIN ES EXITOSO
+     * 
+     * Observa cambios en currentUser. Cuando el login es exitoso
+     * (currentUser no es null), guarda el userId y navega a la pantalla correspondiente.
+     */
+    LaunchedEffect(currentUser) {
+        if (currentUser != null) {
+            isLoading = false
+            sessionManager.saveUserId(currentUser!!.id)
+            
+            val destination = when (currentUser!!.role.name) {
+                "ADMIN" -> RouteScreen.HomeAdmin.route
+                "USER" -> RouteScreen.HomeUser.route
+                else -> RouteScreen.HomeUser.route
+            }
+            
+            navController.navigate(destination) {
+                popUpTo(RouteScreen.Login.route) { inclusive = true }
+            }
+        }
+    }
 
     /**
      * FUNCIONES DE VALIDACIÓN
@@ -249,31 +300,8 @@ fun LoginScreen(
                             isLoading = true
                             errorMessage = ""
                             
-                            val loginResult = usersViewModel.login(email, password)
-                            if (loginResult != null) {
-                                /**
-                                 * LOGIN EXITOSO
-                                 * 
-                                 * 1. Guardar el userId en SessionManager (SharedPreferences)
-                                 *    Esto permite el auto-login en futuros inicios de la app
-                                 * 2. Navegar a la pantalla correspondiente según el rol
-                                 * 3. Limpiar el backstack para evitar volver al Login con botón atrás
-                                 */
-                                sessionManager.saveUserId(loginResult.id)
-                                
-                                val destination = when (loginResult.role.name) {
-                                    "ADMIN" -> RouteScreen.HomeAdmin.route
-                                    "USER" -> RouteScreen.HomeUser.route
-                                    else -> RouteScreen.HomeUser.route
-                                }
-                                
-                                navController.navigate(destination) {
-                                    popUpTo(RouteScreen.Login.route) { inclusive = true }
-                                }
-                            } else {
-                                errorMessage = "Email o contraseña incorrectos"
-                            }
-                            isLoading = false
+                            // Ejecutar login - actualiza currentUser StateFlow
+                            usersViewModel.login(email, password)
                         }
                     },
                     enabled = !isLoading,

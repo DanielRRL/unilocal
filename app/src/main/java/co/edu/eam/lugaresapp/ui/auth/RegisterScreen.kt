@@ -17,6 +17,7 @@ import co.edu.eam.lugaresapp.R
 import co.edu.eam.lugaresapp.model.LocationData
 import co.edu.eam.lugaresapp.model.User
 import co.edu.eam.lugaresapp.ui.components.InputText
+import co.edu.eam.lugaresapp.ui.components.OperationResultHandler
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
 
 /**
@@ -92,22 +93,6 @@ fun RegisterScreen(
     
     // Estado: Control de expansión del dropdown de ciudades
     var cityExpanded by remember { mutableStateOf(false) }
-    
-    // ==================== OBSERVAR RESULTADO DE FIREBASE ====================
-    
-    LaunchedEffect(reportResult) {
-        when (reportResult) {
-            is co.edu.eam.lugaresapp.utils.RequestResult.Success -> {
-                Toast.makeText(context, "Usuario registrado exitosamente", Toast.LENGTH_SHORT).show()
-                onNavigateToHome()
-            }
-            is co.edu.eam.lugaresapp.utils.RequestResult.Failure -> {
-                val errorMessage = (reportResult as co.edu.eam.lugaresapp.utils.RequestResult.Failure).errorMessage
-                Toast.makeText(context, "Error: $errorMessage", Toast.LENGTH_SHORT).show()
-            }
-            else -> {}
-        }
-    }
     
     // ==================== DATOS DE UBICACIÓN ====================
     
@@ -378,6 +363,19 @@ fun RegisterScreen(
             ) {
                 Text(text = stringResource(id = R.string.register_button))
             }
+
+            // ==================== MANEJADOR DE RESULTADOS ====================
+            
+            OperationResultHandler(
+                result = reportResult,
+                onSuccess = {
+                    onNavigateToHome()
+                    usersViewModel.resetOperationResult()
+                },
+                onFailure = {
+                    usersViewModel.resetOperationResult()
+                }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 

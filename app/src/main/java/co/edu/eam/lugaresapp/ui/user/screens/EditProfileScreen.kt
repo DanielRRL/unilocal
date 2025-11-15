@@ -55,15 +55,24 @@ fun EditProfileScreen(
     val sessionManager = remember { SessionManager(context) }
     val currentUserId = sessionManager.getUserId()
     
-    // Obtener usuario actual
-    val currentUser = currentUserId?.let { usersViewModel.findById(it) }
+    // Obtener usuario actual desde StateFlow
+    val currentUser by usersViewModel.currentUser.collectAsState()
+    
+    // Cargar usuario si no está cargado
+    LaunchedEffect(currentUserId) {
+        currentUserId?.let { userId ->
+            if (currentUser == null || currentUser?.id != userId) {
+                usersViewModel.findById(userId)
+            }
+        }
+    }
     
     // Estados del formulario (inicializados con datos actuales)
-    var name by remember { mutableStateOf(currentUser?.name ?: "") }
-    var username by remember { mutableStateOf(currentUser?.username ?: "") }
-    var phone by remember { mutableStateOf(currentUser?.phone ?: "") }
-    var department by remember { mutableStateOf(currentUser?.department ?: "") }
-    var city by remember { mutableStateOf(currentUser?.city ?: "") }
+    var name by remember(currentUser) { mutableStateOf(currentUser?.name ?: "") }
+    var username by remember(currentUser) { mutableStateOf(currentUser?.username ?: "") }
+    var phone by remember(currentUser) { mutableStateOf(currentUser?.phone ?: "") }
+    var department by remember(currentUser) { mutableStateOf(currentUser?.department ?: "") }
+    var city by remember(currentUser) { mutableStateOf(currentUser?.city ?: "") }
     val email = currentUser?.email ?: "" // Email NO editable
     
     // Estados para dropdowns
@@ -320,8 +329,19 @@ fun EditProfileScreen(
                         
                         // ==================== ACTUALIZAR USUARIO ====================
                         
+                        // Verificar que currentUser no sea null
+                        val userId = currentUser?.id
+                        if (userId == null) {
+                            Toast.makeText(
+                                context,
+                                "Error: Usuario no encontrado",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+                        
                         usersViewModel.updateUser(
-                            userId = currentUser.id,
+                            userId = userId,
                             name = name.trim(),
                             username = username.trim(),
                             phone = phone.trim(),

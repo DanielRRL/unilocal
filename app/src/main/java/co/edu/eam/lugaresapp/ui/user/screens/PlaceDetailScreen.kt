@@ -582,7 +582,7 @@ fun ReviewCard(
     isOwner: Boolean = false,
     onRespondClick: () -> Unit = {}
 ) {
-    val user = usersViewModel.findById(review.userID)
+    val user = usersViewModel.getUserFromList(review.userID)
     
     Card(
         modifier = Modifier.fillMaxWidth(),

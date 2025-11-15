@@ -33,7 +33,7 @@ package co.edu.eam.lugaresapp.model
  * @param favorites Lista de IDs de lugares marcados como favoritos por el usuario
  */
 data class User(
-    val id: String = "",
+    var id: String = "",
     val name: String = "",
     val username: String = "",
     val phone: String = "",

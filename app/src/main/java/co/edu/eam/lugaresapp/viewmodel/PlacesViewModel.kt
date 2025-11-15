@@ -1,38 +1,46 @@
 package co.edu.eam.lugaresapp.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.edu.eam.lugaresapp.model.Location
 import co.edu.eam.lugaresapp.model.ModerationRecord
 import co.edu.eam.lugaresapp.model.Place
 import co.edu.eam.lugaresapp.model.PlaceType
+import co.edu.eam.lugaresapp.utils.RequestResult
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 /**
  * VIEWMODEL DE LUGARES uniLocal
  * 
  * Este ViewModel maneja toda la lógica de negocio relacionada con lugares y moderación.
+ * Integra Firebase Firestore para persistencia en tiempo real.
  * 
  * RESPONSABILIDADES:
- * - Gestión CRUD de lugares
+ * - Gestión CRUD de lugares con Firebase
  * - Sistema de moderación (aprobar/rechazar lugares)
  * - Filtrado de lugares pendientes de aprobación
  * - Registro de acciones de moderación
  * - Búsqueda y filtrado de lugares
+ * - Sincronización en tiempo real con Firebase
  * 
  * PATRÓN ARQUITECTÓNICO:
  * - StateFlow para exposición reactiva de datos
- * - Inmutabilidad mediante copy() y reasignación
- * - Sin efectos secundarios fuera del ViewModel
- * - Persistencia en memoria (temporal)
+ * - RequestResult para estados de operaciones
+ * - Coroutines para operaciones asíncronas
+ * - Firebase Firestore como backend
  */
 class PlacesViewModel: ViewModel() {
 
     /**
      * Estado privado de lugares
-     * Lista mutable que contiene todos los lugares de la aplicación
+     * Lista mutable que contiene todos los lugares sincronizados con Firebase
      */
     private val _places = MutableStateFlow(emptyList<Place>())
     
@@ -40,6 +48,12 @@ class PlacesViewModel: ViewModel() {
      * Estado público de lugares para observación desde la UI
      */
     val places: StateFlow<List<Place>> = _places.asStateFlow()
+
+    /**
+     * Estado de resultado de operaciones (crear, aprobar, rechazar)
+     */
+    private val _reportResult = MutableStateFlow<RequestResult?>(null)
+    val reportResult: StateFlow<RequestResult?> = _reportResult.asStateFlow()
 
     /**
      * Estado privado de registros de moderación
@@ -56,122 +70,154 @@ class PlacesViewModel: ViewModel() {
      * UBICACIÓN SIMULADA DEL USUARIO
      * 
      * En producción, esta ubicación vendría del GPS o de la ciudad del usuario.
-     * Para desarrollo, usamos una ubicación fija cercana a los lugares de prueba.
+     * Para desarrollo, usamos una ubicación fija cercana a Armenia, Quindío.
      */
-    val defaultUserLocation = Location(1.23, 2.34)
+    val defaultUserLocation = Location(4.4687891, -75.6491181)
+
+    /**
+     * Instancia de Firebase Firestore
+     */
+    val db = Firebase.firestore
 
     init {
         loadPlaces()
+        loadModerationRecords()
     }
 
     /**
-     * CARGA DE LUGARES INICIALES
+     * CARGA DE LUGARES DESDE FIREBASE FIRESTORE
      * 
-     * Carga datos de prueba en la aplicación.
-     * En producción, estos datos vendrían de una base de datos o API.
+     * Carga todos los lugares existentes desde Firebase en tiempo real.
      * 
-     * NOTA: Los lugares de prueba se crean con approved=false por defecto,
-     * simulando que necesitan aprobación de un administrador.
+     * FUNCIONAMIENTO:
+     * - Se ejecuta en una coroutine (viewModelScope) para operación asíncrona
+     * - Consulta la colección "places" en Firestore
+     * - Usa addSnapshotListener para escuchar cambios en tiempo real
+     * - Convierte los documentos de Firebase a objetos Place
+     * - Actualiza el StateFlow _places con la lista obtenida
+     * - Maneja errores con logging
      */
-    fun loadPlaces(){
+    private fun loadPlaces(){
+        viewModelScope.launch {
+            try {
+                db.collection("places")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            android.util.Log.e("PlacesViewModel", "Error al cargar lugares: ${error.message}", error)
+                            return@addSnapshotListener
+                        }
 
-        _places.value = listOf(
-            Place(
-                id = "1",
-                title = "Restaurante El paisa",
-                description = "El mejor restaurante paisa",
-                address = "Cra 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://elbalconpaisa.com/images/about-img-1.png"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.RESTAURANT,
-                schedules = listOf(),
-                approved = true  // Pre-aprobado para testing
-            ),
-            Place(
-                id = "2",
-                title = "Bar test 1",
-                description = "Un bar test",
-                address = "Calle 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://cdn0.uncomo.com/es/posts/6/8/4/como_gestionar_un_bar_22486_orig.jpg"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.BAR,
-                schedules = listOf()
-                // approved = false por defecto (pendiente de moderación)
-            ),
-            Place(
-                id = "3",
-                title = "Bar test 2",
-                description = "Un bar test",
-                address = "Calle 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://cdn0.uncomo.com/es/posts/6/8/4/como_gestionar_un_bar_22486_orig.jpg"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.BAR,
-                schedules = listOf()
-            ),
-            Place(
-                id = "4",
-                title = "Bar test 3",
-                description = "Un bar test",
-                address = "Calle 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://cdn0.uncomo.com/es/posts/6/8/4/como_gestionar_un_bar_22486_orig.jpg"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.BAR,
-                schedules = listOf()
-            ),
-            Place(
-                id = "5",
-                title = "Bar test 4",
-                description = "Un bar test",
-                address = "Calle 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://cdn0.uncomo.com/es/posts/6/8/4/como_gestionar_un_bar_22486_orig.jpg"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.BAR,
-                schedules = listOf()
-            ),
-            Place(
-                id = "6",
-                title = "Bar test 5",
-                description = "Un bar test",
-                address = "Calle 12 # 12 - 12",
-                location = Location(1.23, 2.34),
-                images = listOf("https://cdn0.uncomo.com/es/posts/6/8/4/como_gestionar_un_bar_22486_orig.jpg"),
-                phones = listOf("3123123123", "3123123123"),
-                type = PlaceType.BAR,
-                schedules = listOf()
-            )
-        )
+                        if (snapshot != null) {
+                            val placesList = snapshot.documents.mapNotNull { document ->
+                                document.toObject(Place::class.java)?.apply {
+                                    this::class.java.getDeclaredField("id").apply {
+                                        isAccessible = true
+                                        set(this@apply, document.id)
+                                    }
+                                }
+                            }
+                            _places.value = placesList
+                            android.util.Log.d("PlacesViewModel", "Lugares cargados: ${placesList.size}")
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("PlacesViewModel", "Error al configurar listener de lugares: ${e.message}", e)
+            }
+        }
+    }
 
+    /**
+     * CARGA DE REGISTROS DE MODERACIÓN DESDE FIREBASE
+     */
+    private fun loadModerationRecords(){
+        viewModelScope.launch {
+            try {
+                db.collection("moderation_records")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            android.util.Log.e("PlacesViewModel", "Error al cargar registros: ${error.message}", error)
+                            return@addSnapshotListener
+                        }
+
+                        if (snapshot != null) {
+                            val recordsList = snapshot.documents.mapNotNull { document ->
+                                document.toObject(ModerationRecord::class.java)?.apply {
+                                    this::class.java.getDeclaredField("id").apply {
+                                        isAccessible = true
+                                        set(this@apply, document.id)
+                                    }
+                                }
+                            }
+                            _moderationRecords.value = recordsList
+                            android.util.Log.d("PlacesViewModel", "Registros cargados: ${recordsList.size}")
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("PlacesViewModel", "Error al configurar listener de moderación: ${e.message}", e)
+            }
+        }
     }
 
     // ==================== OPERACIONES CRUD ====================
 
     /**
-     * AGREGAR NUEVO LUGAR
+     * AGREGAR NUEVO LUGAR CON FIREBASE
      * 
-     * Añade un nuevo lugar a la lista de lugares.
-     * El lugar se añade con el estado que tenga configurado (approved true/false).
+     * Guarda un nuevo lugar en Firebase Firestore de forma asíncrona.
      * 
-     * @param place Lugar a agregar
+     * FUNCIONAMIENTO:
+     * - Ejecuta en viewModelScope para no bloquear UI
+     * - Actualiza _reportResult con estados (Loading/Success/Failure)
+     * - Llama a addPlaceFirebase() para guardar en Firestore
+     * - El SnapshotListener actualiza automáticamente _places
      */
     fun addPlace(place: Place) {
-        _places.value = _places.value + place
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            try {
+                addPlaceFirebase(place)
+                _reportResult.value = RequestResult.Success("Lugar creado. Pendiente de aprobación")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al crear lugar")
+                android.util.Log.e("PlacesViewModel", "Error al crear lugar: ${e.message}", e)
+            }
+        }
     }
 
     /**
-     * ELIMINAR LUGAR
-     * 
-     * Elimina un lugar de la lista por su ID.
-     * Utiliza filter para crear una nueva lista sin el lugar especificado.
-     * 
-     * @param placeId ID del lugar a eliminar
+     * GUARDAR LUGAR EN FIREBASE FIRESTORE
+     */
+    private suspend fun addPlaceFirebase(place: Place) {
+        db.collection("places")
+            .document(place.id)
+            .set(place)
+            .await()
+    }
+
+    /**
+     * ELIMINAR LUGAR CON FIREBASE
      */
     fun deletePlace(placeId: String) {
-        _places.value = _places.value.filter { it.id != placeId }
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            try {
+                deletePlaceFirebase(placeId)
+                _reportResult.value = RequestResult.Success("Lugar eliminado correctamente")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al eliminar lugar")
+                android.util.Log.e("PlacesViewModel", "Error al eliminar lugar: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * ELIMINAR LUGAR DE FIREBASE FIRESTORE
+     */
+    private suspend fun deletePlaceFirebase(placeId: String) {
+        db.collection("places")
+            .document(placeId)
+            .delete()
+            .await()
     }
 
     /**
@@ -214,83 +260,92 @@ class PlacesViewModel: ViewModel() {
     }
 
     /**
-     * APROBAR LUGAR
+     * APROBAR LUGAR CON FIREBASE
      * 
      * Marca un lugar como aprobado y registra la acción de moderación.
      * 
      * FUNCIONAMIENTO:
-     * 1. Actualiza el lugar estableciendo approved = true
+     * 1. Actualiza el lugar en Firebase estableciendo approved = true
      * 2. Crea un registro de moderación con action = "APPROVE"
-     * 3. Añade el registro al historial de moderación
-     * 
-     * @param placeId ID del lugar a aprobar
-     * @param moderatorId ID del administrador que aprueba
+     * 3. Guarda el registro en Firebase
+     * 4. El SnapshotListener sincroniza automáticamente
      */
     fun approvePlace(placeId: String, moderatorId: String) {
-        // Actualizar el lugar a approved = true
-        _places.value = _places.value.map { place ->
-            if (place.id == placeId) {
-                place.copy(approved = true)
-            } else {
-                place
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            try {
+                // Actualizar lugar en Firebase
+                approvePlaceFirebase(placeId)
+                
+                // Registrar acción de moderación
+                addModerationRecord(
+                    placeId = placeId,
+                    moderatorId = moderatorId,
+                    action = "APPROVE",
+                    reason = null
+                )
+                
+                _reportResult.value = RequestResult.Success("Lugar aprobado correctamente")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al aprobar lugar")
+                android.util.Log.e("PlacesViewModel", "Error al aprobar lugar: ${e.message}", e)
             }
         }
-        
-        // Registrar la acción de moderación
-        addModerationRecord(
-            placeId = placeId,
-            moderatorId = moderatorId,
-            action = "APPROVE",
-            reason = null
-        )
     }
 
     /**
-     * RECHAZAR LUGAR
+     * ACTUALIZAR ESTADO DE APROBACIÓN EN FIREBASE
+     */
+    private suspend fun approvePlaceFirebase(placeId: String) {
+        db.collection("places")
+            .document(placeId)
+            .update("approved", true)
+            .await()
+    }
+
+    /**
+     * RECHAZAR LUGAR CON FIREBASE
      * 
      * Rechaza un lugar y registra la acción con una razón opcional.
-     * 
-     * FUNCIONAMIENTO:
-     * 1. Establece approved = false en el lugar
-     * 2. Crea un registro de moderación con action = "REJECT"
-     * 3. Incluye la razón del rechazo si fue proporcionada
-     * 
-     * NOTA: En versiones futuras, esta función podría eliminar el lugar
-     * en lugar de solo marcarlo como no aprobado.
-     * 
-     * @param placeId ID del lugar a rechazar
-     * @param moderatorId ID del administrador que rechaza
-     * @param reason Razón opcional del rechazo
      */
     fun rejectPlace(placeId: String, moderatorId: String, reason: String? = null) {
-        // Marcar como no aprobado (en el futuro podría eliminarse)
-        _places.value = _places.value.map { place ->
-            if (place.id == placeId) {
-                place.copy(approved = false)
-            } else {
-                place
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            try {
+                // Actualizar lugar en Firebase
+                rejectPlaceFirebase(placeId)
+                
+                // Registrar acción de moderación
+                addModerationRecord(
+                    placeId = placeId,
+                    moderatorId = moderatorId,
+                    action = "REJECT",
+                    reason = reason
+                )
+                
+                _reportResult.value = RequestResult.Success("Lugar rechazado")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al rechazar lugar")
+                android.util.Log.e("PlacesViewModel", "Error al rechazar lugar: ${e.message}", e)
             }
         }
-        
-        // Registrar la acción de moderación con razón
-        addModerationRecord(
-            placeId = placeId,
-            moderatorId = moderatorId,
-            action = "REJECT",
-            reason = reason
-        )
     }
 
     /**
-     * AGREGAR REGISTRO DE MODERACIÓN
+     * MARCAR LUGAR COMO NO APROBADO EN FIREBASE
+     */
+    private suspend fun rejectPlaceFirebase(placeId: String) {
+        db.collection("places")
+            .document(placeId)
+            .update("approved", false)
+            .await()
+    }
+
+    /**
+     * AGREGAR REGISTRO DE MODERACIÓN CON FIREBASE
      * 
-     * Función privada que añade un registro al historial de moderación.
+     * Función privada que añade un registro al historial de moderación en Firebase.
      * Genera automáticamente el ID y timestamp del registro.
-     * 
-     * @param placeId ID del lugar moderado
-     * @param moderatorId ID del moderador
-     * @param action Acción realizada (APPROVE, REJECT, etc.)
-     * @param reason Razón opcional de la acción
      */
     private fun addModerationRecord(
         placeId: String,
@@ -298,16 +353,32 @@ class PlacesViewModel: ViewModel() {
         action: String,
         reason: String?
     ) {
-        val record = ModerationRecord(
-            id = UUID.randomUUID().toString(),
-            placeId = placeId,
-            moderatorId = moderatorId,
-            action = action,
-            timestamp = System.currentTimeMillis(),
-            reason = reason
-        )
-        
-        _moderationRecords.value = _moderationRecords.value + record
+        viewModelScope.launch {
+            try {
+                val record = ModerationRecord(
+                    id = UUID.randomUUID().toString(),
+                    placeId = placeId,
+                    moderatorId = moderatorId,
+                    action = action,
+                    timestamp = System.currentTimeMillis(),
+                    reason = reason
+                )
+                
+                addModerationRecordFirebase(record)
+            } catch (e: Exception) {
+                android.util.Log.e("PlacesViewModel", "Error al registrar moderación: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * GUARDAR REGISTRO DE MODERACIÓN EN FIREBASE
+     */
+    private suspend fun addModerationRecordFirebase(record: ModerationRecord) {
+        db.collection("moderation_records")
+            .document(record.id)
+            .set(record)
+            .await()
     }
 
     // ==================== OPERACIONES DE BÚSQUEDA Y FILTRADO ====================
@@ -473,12 +544,19 @@ class PlacesViewModel: ViewModel() {
                     val distance = haversine(userLat, userLon, place.location.latitude, place.location.longitude)
                     Pair(place, distance)
                 }
-                .filter { (_, distance) -> distance <= maxDistance }
-                .sortedBy { (_, distance) -> distance }
-                .map { (place, _) -> place }
+                .filter { (place: Place, distance: Double) -> distance <= maxDistance }
+                .sortedBy { (place: Place, distance: Double) -> distance }
+                .map { (place: Place, distance: Double) -> place }
         }
         
         return result
+    }
+
+    /**
+     * RESETEAR RESULTADO DE OPERACIÓN
+     */
+    fun resetOperationResult() {
+        _reportResult.value = null
     }
 
 }

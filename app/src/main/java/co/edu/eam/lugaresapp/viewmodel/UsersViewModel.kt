@@ -62,6 +62,9 @@ class UsersViewModel: ViewModel(){
     private val _reportResult = MutableStateFlow<RequestResult?>(null)
     val reportResult: StateFlow<RequestResult?> = _reportResult.asStateFlow()
 
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
 
     val db = Firebase.firestore
 
@@ -232,126 +235,204 @@ class UsersViewModel: ViewModel(){
     }
 
     /**
-     * BÚSQUEDA DE USUARIO POR ID
+     * BÚSQUEDA DE USUARIO POR ID EN FIREBASE
      * 
-     * Busca un usuario específico en la lista usando su ID único.
+     * Busca un usuario específico en Firebase usando su ID único.
+     * Actualiza _currentUser con el resultado y _reportResult con el estado.
      * 
-     * @param id: String - ID único del usuario
-     * @return User? - El usuario encontrado o null si no existe
+     * FUNCIONAMIENTO:
+     * - Ejecuta consulta asíncrona a Firebase
+     * - Actualiza _reportResult (Loading/Success/Failure)
+     * - Actualiza _currentUser con el usuario encontrado
+     * - Maneja errores con logging apropiado
+     * 
+     * @param id String - ID único del usuario a buscar
      */
-    fun findById(id: String): User?{
-        return _users.value.find { it.id == id } // find() retorna el primer elemento que cumple la condición
+    fun findById(id: String) {
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            
+            try {
+                findByIdFirebase(id)
+                _reportResult.value = RequestResult.Success("Usuario encontrado")
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al buscar usuario")
+                android.util.Log.e("UsersViewModel", "Error al buscar usuario: ${e.message}", e)
+            }
+        }
     }
 
     /**
-     * BÚSQUEDA DE USUARIO POR EMAIL
+     * CONSULTA FIREBASE PARA BUSCAR USUARIO POR ID
      * 
-     * Busca un usuario específico en la lista usando su email.
-     * Útil para validar si un email ya está registrado.
+     * Función suspendida que consulta Firestore para obtener un usuario por ID.
      * 
-     * @param email: String - Email del usuario
-     * @return User? - El usuario encontrado o null si no existe
+     * @param id String - ID del documento en Firestore
+     * @throws Exception si hay error de conexión o el documento no existe
      */
-    fun findByEmail(email: String): User?{
-        return _users.value.find { it.email == email }
+    private suspend fun findByIdFirebase(id: String) {
+        val snapshot = db.collection("users")
+            .document(id)
+            .get()
+            .await()
+
+        val user = snapshot.toObject(User::class.java)?.apply {
+            this.id = snapshot.id
+        }
+
+        _currentUser.value = user
     }
 
     /**
-     * FUNCIÓN DE LOGIN/AUTENTICACIÓN
+     * BUSCAR USUARIO EN LISTA LOCAL (HELPER)
      * 
-     * Valida las credenciales del usuario (email y contraseña).
+     * Busca un usuario en la lista local cargada (no consulta Firebase).
+     * Útil para búsquedas rápidas en UI sin hacer consultas adicionales.
+     * 
+     * @param id String - ID del usuario a buscar
+     * @return User? - Usuario encontrado o null
+     */
+    fun getUserFromList(id: String): User? {
+        return _users.value.find { it.id == id }
+    }
+
+    /**
+     * FUNCIÓN DE LOGIN/AUTENTICACIÓN CON FIREBASE
+     * 
+     * Valida las credenciales del usuario (email y contraseña) contra Firebase.
      * Esta es la función principal de autenticación de la aplicación.
      * 
      * FUNCIONAMIENTO:
      * - Hashea la contraseña ingresada usando SHA-256
-     * - Busca un usuario que tenga el email Y el hash de contraseña correctos
-     * - Retorna el usuario si las credenciales son válidas
-     * - Retorna null si las credenciales son incorrectas
+     * - Consulta Firebase para buscar usuario con email y password hasheado
+     * - Actualiza _currentUser con el usuario autenticado
+     * - Actualiza _reportResult con el estado de la operación
      * 
      * SEGURIDAD:
      * - NUNCA compara contraseñas en texto plano
-     * - Hashea la contraseña ingresada y compara hashes
+     * - Hashea la contraseña ingresada y consulta Firebase con el hash
      * - Los hashes son irreversibles (no se puede obtener la contraseña original)
      * - Mismo input siempre produce mismo hash (determinístico)
      * 
      * @param email String - Email del usuario
-     * @param password String - Contraseña del usuario (será hasheada antes de comparar)
-     * @return User? - Usuario autenticado o null si las credenciales son incorrectas
+     * @param password String - Contraseña del usuario (será hasheada antes de consultar)
      * 
      * EJEMPLO DE USO:
      * ```
-     * val user = usersViewModel.login("daniel@email.com", "miPassword123")
-     * if (user != null) {
-     *     // Login exitoso, navegar a pantalla principal
-     *     sessionManager.saveSession(user.id, user.role)
-     * } else {
-     *     // Credenciales incorrectas
-     *     Toast.makeText(context, "Email o contraseña incorrectos", Toast.LENGTH_SHORT).show()
-     * }
+     * usersViewModel.login("daniel@email.com", "miPassword123")
+     * // Observar reportResult para saber si fue exitoso
+     * // Observar currentUser para obtener datos del usuario autenticado
      * ```
      */
-    fun login(email: String, password: String): User?{
-        // Hashear la contraseña ingresada para comparar con la almacenada
-        val hashedPassword = hashPassword(password)
-        
-        // Buscar usuario con email Y hash de contraseña coincidentes
-        return _users.value.find { it.email == email && it.password == hashedPassword }
+    fun login(email: String, password: String) {
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            
+            try {
+                val hashedPassword = hashPassword(password)
+                loginFirebase(email, hashedPassword)
+                
+                if (_currentUser.value != null) {
+                    _reportResult.value = RequestResult.Success("Inicio de sesión exitoso")
+                } else {
+                    _reportResult.value = RequestResult.Failure(errorMessage = "Email o contraseña incorrectos")
+                }
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al iniciar sesión")
+                android.util.Log.e("UsersViewModel", "Error al iniciar sesión: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * CONSULTA FIREBASE PARA LOGIN
+     * 
+     * Función suspendida que consulta Firestore para autenticar usuario.
+     * 
+     * @param email String - Email del usuario
+     * @param hashedPassword String - Contraseña ya hasheada con SHA-256
+     * @throws Exception si hay error de conexión
+     */
+    private suspend fun loginFirebase(email: String, hashedPassword: String) {
+        val snapshot = db.collection("users")
+            .whereEqualTo("email", email)
+            .whereEqualTo("password", hashedPassword)
+            .get()
+            .await()
+
+        val user = snapshot.documents.firstOrNull()?.toObject(User::class.java)?.apply {
+            this.id = snapshot.documents.first().id
+        }
+
+        _currentUser.value = user
     }
 
     // ==================== GESTIÓN DE FAVORITOS ====================
 
     /**
-     * TOGGLE DE FAVORITO
+     * TOGGLE DE FAVORITO CON PERSISTENCIA EN FIREBASE
      * 
      * Alterna el estado de un lugar en la lista de favoritos de un usuario.
      * Si el lugar ya está en favoritos, lo remueve. Si no está, lo añade.
+     * Guarda los cambios en Firebase automáticamente.
      * 
      * FUNCIONAMIENTO:
-     * - Busca el usuario por ID
+     * - Busca el usuario en la lista local
      * - Crea una lista mutable de sus favoritos
-     * - Si el placeId existe, lo remueve
-     * - Si no existe, lo añade
-     * - Actualiza el usuario con la nueva lista de favoritos
-     * - Reasigna el StateFlow completo para mantener inmutabilidad
+     * - Toggle: remueve si existe, añade si no existe
+     * - Actualiza el usuario localmente (StateFlow)
+     * - Sincroniza cambios con Firebase
+     * - Maneja errores con logging apropiado
      * 
-     * PATRÓN DE INMUTABILIDAD:
-     * - No modifica objetos directamente
-     * - Usa copy() para crear nuevas instancias
-     * - Reasigna _users.value completamente
-     * - Esto garantiza que StateFlow detecte el cambio y notifique a la UI
-     * 
-     * @param userId: String - ID del usuario que marca/desmarca favorito
-     * @param placeId: String - ID del lugar a marcar/desmarcar como favorito
-     * 
-     * EJEMPLO DE USO:
-     * ```
-     * // Usuario marca lugar como favorito
-     * usersViewModel.toggleFavorite("2", "place123")
-     * 
-     * // Usuario desmarca el mismo lugar (segundo click)
-     * usersViewModel.toggleFavorite("2", "place123")
-     * ```
+     * @param userId String - ID del usuario que marca/desmarca favorito
+     * @param placeId String - ID del lugar a marcar/desmarcar como favorito
      */
     fun toggleFavorite(userId: String, placeId: String) {
-        _users.value = _users.value.map { user ->
-            if (user.id == userId) {
-                // Crear lista mutable de favoritos para modificarla
-                val favs = user.favorites.toMutableList()
-                
-                // Toggle: remover si existe, añadir si no existe
-                if (favs.contains(placeId)) {
-                    favs.remove(placeId)
-                } else {
-                    favs.add(placeId)
+        viewModelScope.launch {
+            try {
+                // Buscar usuario y actualizar localmente
+                val updatedUser = _users.value.find { it.id == userId }?.let { user ->
+                    val favs = user.favorites.toMutableList()
+                    
+                    // Toggle: remover si existe, añadir si no existe
+                    if (favs.contains(placeId)) {
+                        favs.remove(placeId)
+                    } else {
+                        favs.add(placeId)
+                    }
+                    
+                    user.copy(favorites = favs)
                 }
                 
-                // Retornar copia del usuario con lista actualizada
-                user.copy(favorites = favs)
-            } else {
-                // Mantener otros usuarios sin cambios
-                user
+                if (updatedUser != null) {
+                    // Actualizar lista local inmediatamente
+                    _users.value = _users.value.map { user ->
+                        if (user.id == userId) updatedUser else user
+                    }
+                    
+                    // Sincronizar con Firebase
+                    updateFavoritesFirebase(userId, updatedUser.favorites)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("UsersViewModel", "Error al actualizar favoritos: ${e.message}", e)
             }
         }
+    }
+
+    /**
+     * ACTUALIZAR FAVORITOS EN FIREBASE
+     * 
+     * Función suspendida que actualiza la lista de favoritos en Firestore.
+     * 
+     * @param userId String - ID del usuario
+     * @param favorites List<String> - Nueva lista de favoritos
+     * @throws Exception si hay error de conexión o permisos
+     */
+    private suspend fun updateFavoritesFirebase(userId: String, favorites: List<String>) {
+        db.collection("users")
+            .document(userId)
+            .update("favorites", favorites)
+            .await()
     }
 
     /**
@@ -390,17 +471,18 @@ class UsersViewModel: ViewModel(){
     // ==================== ACTUALIZACIÓN DE PERFIL ====================
 
     /**
-     * ACTUALIZAR DATOS DE USUARIO
+     * ACTUALIZAR DATOS DE USUARIO CON PERSISTENCIA EN FIREBASE
      * 
      * Permite actualizar los datos editables de un usuario existente.
      * NO permite modificar email ni contraseña (campos sensibles).
+     * Guarda los cambios en Firebase automáticamente.
      * 
      * FUNCIONAMIENTO:
      * - Busca el usuario por ID
-     * - Actualiza solo los campos permitidos: name, username, phone, department, city
-     * - Mantiene sin cambios: id, email, password, role, favorites
-     * - Usa copy() para crear una nueva instancia inmutable
-     * - Actualiza el StateFlow completo para notificar cambios a la UI
+     * - Actualiza solo campos permitidos: name, username, phone, department, city
+     * - Actualiza el StateFlow local inmediatamente
+     * - Sincroniza cambios con Firebase
+     * - Actualiza _reportResult con el estado de la operación
      * 
      * CAMPOS EDITABLES:
      * - name: Nombre completo del usuario
@@ -422,18 +504,6 @@ class UsersViewModel: ViewModel(){
      * @param phone String - Nuevo número de teléfono
      * @param department String - Nuevo departamento de residencia
      * @param city String - Nueva ciudad de residencia
-     * 
-     * EJEMPLO DE USO:
-     * ```
-     * usersViewModel.updateUser(
-     *     userId = "2",
-     *     name = "Daniel Fernando",
-     *     username = "danifernando",
-     *     phone = "3001234567",
-     *     department = "Quindío",
-     *     city = "Armenia"
-     * )
-     * ```
      */
     fun updateUser(
         userId: String,
@@ -443,22 +513,72 @@ class UsersViewModel: ViewModel(){
         department: String,
         city: String
     ) {
-        _users.value = _users.value.map { user ->
-            if (user.id == userId) {
-                // Actualizar solo campos permitidos
-                user.copy(
+        viewModelScope.launch {
+            _reportResult.value = RequestResult.Loading
+            
+            try {
+                // Actualizar localmente
+                val updatedUser = _users.value.find { it.id == userId }?.copy(
                     name = name,
                     username = username,
                     phone = phone,
                     department = department,
                     city = city
-                    // email, password, role, id, favorites se mantienen sin cambios
                 )
-            } else {
-                // Mantener otros usuarios sin cambios
-                user
+                
+                if (updatedUser != null) {
+                    // Actualizar lista local inmediatamente
+                    _users.value = _users.value.map { user ->
+                        if (user.id == userId) updatedUser else user
+                    }
+                    
+                    // Sincronizar con Firebase
+                    updateUserFirebase(userId, name, username, phone, department, city)
+                    
+                    _reportResult.value = RequestResult.Success("Perfil actualizado correctamente")
+                } else {
+                    _reportResult.value = RequestResult.Failure(errorMessage = "Usuario no encontrado")
+                }
+            } catch (e: Exception) {
+                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al actualizar perfil")
+                android.util.Log.e("UsersViewModel", "Error al actualizar usuario: ${e.message}", e)
             }
         }
+    }
+
+    /**
+     * ACTUALIZAR USUARIO EN FIREBASE
+     * 
+     * Función suspendida que actualiza los campos editables en Firestore.
+     * 
+     * @param userId String - ID del usuario
+     * @param name String - Nuevo nombre
+     * @param username String - Nuevo username
+     * @param phone String - Nuevo teléfono
+     * @param department String - Nuevo departamento
+     * @param city String - Nueva ciudad
+     * @throws Exception si hay error de conexión o permisos
+     */
+    private suspend fun updateUserFirebase(
+        userId: String,
+        name: String,
+        username: String,
+        phone: String,
+        department: String,
+        city: String
+    ) {
+        db.collection("users")
+            .document(userId)
+            .update(
+                mapOf(
+                    "name" to name,
+                    "username" to username,
+                    "phone" to phone,
+                    "department" to department,
+                    "city" to city
+                )
+            )
+            .await()
     }
 
     /**
@@ -486,6 +606,26 @@ class UsersViewModel: ViewModel(){
      */
     fun existsByEmail(email: String): Boolean {
         return _users.value.any { it.email.equals(email, ignoreCase = true) }
+    }
+
+    /**
+     * RESETEAR RESULTADO DE OPERACIÓN
+     * 
+     * Limpia el estado de _reportResult para permitir nuevas operaciones.
+     * Útil para resetear la UI después de mostrar éxito o error.
+     */
+    fun resetOperationResult() {
+        _reportResult.value = null
+    }
+
+    /**
+     * Limpia el usuario actual (para logout).
+     * 
+     * Esta función resetea el currentUser a null, lo cual es necesario
+     * durante el cierre de sesión para evitar auto-login.
+     */
+    fun clearCurrentUser() {
+        _currentUser.value = null
     }
 
 }

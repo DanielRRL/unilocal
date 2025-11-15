@@ -79,15 +79,23 @@ fun ProfileScreen(
     }
     
     // Obtener datos del usuario actual desde el ViewModel
-    val user = usersViewModel.findById(currentUserId)
+    val currentUser by usersViewModel.currentUser.collectAsState()
     
-    // Si usuario no existe en base de datos, mostrar error
+    // Cargar usuario si no está cargado
+    LaunchedEffect(currentUserId) {
+        if (currentUser == null || currentUser?.id != currentUserId) {
+            usersViewModel.findById(currentUserId)
+        }
+    }
+    
+    // Si usuario no existe en base de datos, mostrar mensaje de carga
+    val user = currentUser
     if (user == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text("Usuario no encontrado")
+            CircularProgressIndicator()
         }
         return
     }

@@ -5,6 +5,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -84,38 +89,58 @@ fun AppNavigation(modifier: Modifier = Modifier) {
      */
     val context = LocalContext.current
     val sessionManager = SessionManager(context)
+    
+    // Observar el usuario actual desde StateFlow
+    val currentUser by usersViewModel.currentUser.collectAsState()
+    
+    // Flag para controlar si ya se intentó el auto-login
+    var autoLoginAttempted by remember { mutableStateOf(false) }
 
     /**
      * AUTO-LOGIN: DETECCIÓN DE SESIÓN ACTIVA
      * 
      * LaunchedEffect se ejecuta una sola vez al inicializar la pantalla (Unit como key).
      * Comprueba si hay un userId guardado en SharedPreferences y, si existe,
-     * navega automáticamente a la pantalla correspondiente según el rol del usuario.
+     * llama a findById() para cargar el usuario en currentUser StateFlow.
      * 
-     * FLUJO:
-     * 1. Obtener userId de SessionManager
-     * 2. Si existe, buscar el usuario en el ViewModel
-     * 3. Navegar a HomeAdmin o HomeUser según el rol
-     * 4. Limpiar el backstack para evitar volver al Login con el botón atrás
+     * Este efecto SOLO intenta cargar el usuario desde SharedPreferences si:
+     * - No se ha intentado antes (autoLoginAttempted = false)
+     * - Existe un userId guardado
      */
     LaunchedEffect(Unit) {
         val currentUserId = sessionManager.getUserId()
-        if (currentUserId != null) {
-            val user = usersViewModel.findById(currentUserId)
-            if (user != null) {
-                // Navegar a la pantalla correspondiente según el rol
-                val destination = when (user.role) {
-                    Role.ADMIN -> RouteScreen.HomeAdmin.route
-                    Role.USER -> RouteScreen.HomeUser.route
-                }
-                
-                // Navegar y limpiar el backstack para evitar volver al Login
-                navController.navigate(destination) {
-                    popUpTo(RouteScreen.Login.route) { inclusive = true }
-                }
-            } else {
-                // Si el usuario no existe, limpiar la sesión
-                sessionManager.clear()
+        if (currentUserId != null && !autoLoginAttempted) {
+            autoLoginAttempted = true
+            usersViewModel.findById(currentUserId)
+        } else if (currentUserId == null) {
+            // Si no hay sesión guardada, marcar como intentado
+            autoLoginAttempted = true
+        }
+    }
+    
+    /**
+     * NAVEGACIÓN AUTOMÁTICA CUANDO SE CARGA EL USUARIO (SOLO AUTO-LOGIN)
+     * 
+     * Observa currentUser. Si se carga exitosamente Y viene del auto-login,
+     * navega a la pantalla correspondiente según el rol del usuario.
+     * 
+     * IMPORTANTE: Solo navega automáticamente si autoLoginAttempted es true
+     * y estamos en la pantalla de Login. Esto evita navegación duplicada
+     * cuando el usuario hace login manualmente (LoginScreen ya maneja esa navegación).
+     */
+    LaunchedEffect(currentUser, autoLoginAttempted) {
+        if (currentUser != null && autoLoginAttempted && 
+            navController.currentBackStackEntry?.destination?.route == RouteScreen.Login.route) {
+            
+            // Navegar a la pantalla correspondiente según el rol
+            val destination = when (currentUser!!.role) {
+                Role.ADMIN -> RouteScreen.HomeAdmin.route
+                Role.USER -> RouteScreen.HomeUser.route
+            }
+            
+            // Navegar y limpiar el backstack para evitar volver al Login
+            navController.navigate(destination) {
+                popUpTo(RouteScreen.Login.route) { inclusive = true }
             }
         }
     }
@@ -198,9 +223,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     reviewsViewModel = reviewsViewModel,
                     usersViewModel = usersViewModel,
                     onLogout = {
-                        // Limpiar sesión y volver al login
+                        // 1. Limpiar sesión de SharedPreferences
+                        sessionManager.clear()
+                        // 2. Limpiar usuario actual del ViewModel
+                        usersViewModel.clearCurrentUser()
+                        // 3. Navegar al login y limpiar backstack
                         navController.navigate(RouteScreen.Login.route) {
-                            popUpTo(RouteScreen.HomeUser.route) { inclusive = true }
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )
@@ -218,9 +247,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     placesViewModel = placesViewModel,
                     usersViewModel = usersViewModel,
                     onLogout = {
-                        // Limpiar sesión y volver al login
+                        // 1. Limpiar sesión de SharedPreferences
+                        sessionManager.clear()
+                        // 2. Limpiar usuario actual del ViewModel
+                        usersViewModel.clearCurrentUser()
+                        // 3. Navegar al login y limpiar backstack
                         navController.navigate(RouteScreen.Login.route) {
-                            popUpTo(RouteScreen.HomeAdmin.route) { inclusive = true }
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )
