@@ -110,10 +110,9 @@ class PlacesViewModel: ViewModel() {
                         if (snapshot != null) {
                             val placesList = snapshot.documents.mapNotNull { document ->
                                 document.toObject(Place::class.java)?.apply {
-                                    this::class.java.getDeclaredField("id").apply {
-                                        isAccessible = true
-                                        set(this@apply, document.id)
-                                    }
+                                    val idField = this::class.java.getDeclaredField("id")
+                                    idField.isAccessible = true
+                                    idField.set(this, document.id)
                                 }
                             }
                             _places.value = placesList
@@ -142,10 +141,9 @@ class PlacesViewModel: ViewModel() {
                         if (snapshot != null) {
                             val recordsList = snapshot.documents.mapNotNull { document ->
                                 document.toObject(ModerationRecord::class.java)?.apply {
-                                    this::class.java.getDeclaredField("id").apply {
-                                        isAccessible = true
-                                        set(this@apply, document.id)
-                                    }
+                                    val idField = this::class.java.getDeclaredField("id")
+                                    idField.isAccessible = true
+                                    idField.set(this, document.id)
                                 }
                             }
                             _moderationRecords.value = recordsList

@@ -24,7 +24,6 @@ import co.edu.eam.lugaresapp.ui.components.InputText
 import co.edu.eam.lugaresapp.ui.components.Map
 import co.edu.eam.lugaresapp.viewmodel.PlacesViewModel
 import co.edu.eam.lugaresapp.viewmodel.UsersViewModel
-import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -340,11 +339,13 @@ fun CreatePlaceScreen(
             TextButton(
                 onClick = {
                     if (openTime.isNotBlank() && closeTime.isNotBlank()) {
-                        try {
+                        // Validar formato HH:mm
+                        val timeRegex = Regex("^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")
+                        if (timeRegex.matches(openTime) && timeRegex.matches(closeTime)) {
                             val schedule = Schedule(
                                 day = selectedDay,
-                                open = LocalTime.parse(openTime),
-                                close = LocalTime.parse(closeTime)
+                                open = openTime,
+                                close = closeTime
                             )
                             schedulesList = schedulesList + schedule
                             Toast.makeText(
@@ -352,7 +353,7 @@ fun CreatePlaceScreen(
                                 "Horario agregado: $selectedDay",
                                 Toast.LENGTH_SHORT
                             ).show()
-                        } catch (e: Exception) {
+                        } else {
                             Toast.makeText(
                                 context,
                                 "Formato de hora inválido. Usa HH:mm (ej: 08:00)",
@@ -498,7 +499,8 @@ fun CreatePlaceScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Espacio adicional para evitar que la BottomBar tape el botón
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }

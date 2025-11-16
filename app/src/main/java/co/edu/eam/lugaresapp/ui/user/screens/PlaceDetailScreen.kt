@@ -695,10 +695,16 @@ fun calculateScheduleStatus(schedules: List<co.edu.eam.lugaresapp.model.Schedule
     }
 
     return if (todaySchedule != null) {
-        if (now.isAfter(todaySchedule.open) && now.isBefore(todaySchedule.close)) {
-            "Abierto"
-        } else {
-            "Cerrado"
+        try {
+            val openTime = LocalTime.parse(todaySchedule.open)
+            val closeTime = LocalTime.parse(todaySchedule.close)
+            if (now.isAfter(openTime) && now.isBefore(closeTime)) {
+                "Abierto"
+            } else {
+                "Cerrado"
+            }
+        } catch (e: Exception) {
+            "Horario inválido"
         }
     } else {
         "Cerrado"
