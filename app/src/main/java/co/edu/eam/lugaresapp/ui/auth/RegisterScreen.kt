@@ -335,17 +335,14 @@ fun RegisterScreen(
                         return@Button
                     }
                     
-                    // Hashear la contraseña con SHA-256
-                    val hashedPassword = usersViewModel.hashPassword(password)
-                    
-                    // Crear objeto User
+                    // Crear objeto User (Firebase Auth maneja el hashing de contraseña automáticamente)
                     val newUser = co.edu.eam.lugaresapp.model.User(
                         id = java.util.UUID.randomUUID().toString(),
                         name = name,
                         username = email,
                         phone = phone,
                         email = email,
-                        password = hashedPassword,
+                        password = password, // Firebase Auth hashea automáticamente
                         department = selectedDepartment,
                         city = selectedCity,
                         role = co.edu.eam.lugaresapp.model.Role.USER,

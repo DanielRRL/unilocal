@@ -412,7 +412,7 @@ fun PlaceDetailScreen(
                                 placeID = id,
                                 rating = reviewRating,
                                 comment = reviewComment.trim(),
-                                date = LocalDateTime.now(),
+                                date = System.currentTimeMillis(),
                                 ownerResponse = null
                             )
 
@@ -605,7 +605,8 @@ fun ReviewCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = review.date.toLocalDate().toString(),
+                    text = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                        .format(java.util.Date(review.date)),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )

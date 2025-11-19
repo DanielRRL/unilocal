@@ -6,13 +6,13 @@ import co.edu.eam.lugaresapp.model.Role
 import co.edu.eam.lugaresapp.model.User
 import co.edu.eam.lugaresapp.utils.RequestResult
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.security.MessageDigest
 
 /**
  * VIEWMODEL DE USUARIOS uniLocal
@@ -67,51 +67,20 @@ class UsersViewModel: ViewModel(){
 
 
     val db = Firebase.firestore
-
+    val auth : FirebaseAuth = FirebaseAuth.getInstance()
 
     /**
      * INICIALIZADOR DEL VIEWMODEL
      * 
      * init {} se ejecuta cuando se crea una instancia del ViewModel.
-     * Aquí cargamos los datos iniciales de usuarios desde Firebase Firestore.
+     * Aquí cargamos los datos iniciales y creamos el usuario administrador si no existe.
      */
     init {
         loadUsers()
+        initializeAdminUser()
     }
 
-    // ==================== FUNCIONES DE SEGURIDAD ====================
-    
-    /**
-     * HASH DE CONTRASEÑA USANDO SHA-256
-     * 
-     * Convierte la contraseña en texto plano a un hash seguro de 64 caracteres.
-     * 
-     * FUNCIONAMIENTO:
-     * - Usa el algoritmo SHA-256 (Secure Hash Algorithm 256-bit)
-     * - Convierte el hash binario a hexadecimal
-     * - El hash es irreversible (no se puede obtener la contraseña original)
-     * 
-     * SEGURIDAD:
-     * - SHA-256 es un algoritmo criptográfico seguro
-     * - Mismo input siempre produce mismo output (determinístico)
-     * - No se puede revertir el hash a la contraseña original
-     * - Dos contraseñas diferentes producen hashes completamente diferentes
-     * 
-     * @param password String - Contraseña en texto plano
-     * @return String - Hash SHA-256 de 64 caracteres en hexadecimal
-     * 
-     * EJEMPLO:
-     * ```
-     * hashPassword("miPassword123") 
-     * // Retorna: "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
-     * ```
-     */
-    fun hashPassword(password: String): String {
-        val bytes = password.toByteArray()
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(bytes)
-        return digest.fold("") { str, it -> str + "%02x".format(it) }
-    }
+    // ==================== CARGA DE DATOS ====================
 
     /**
      * CARGA DE USUARIOS DESDE FIREBASE FIRESTORE
@@ -210,28 +179,95 @@ class UsersViewModel: ViewModel(){
     }
     
     /**
-     * GUARDADO DE USUARIO EN FIREBASE FIRESTORE
+     * GUARDADO DE USUARIO EN FIREBASE AUTH Y FIRESTORE
      * 
-     * Función suspendida que guarda el usuario en la colección "users" de Firestore.
+     * Función suspendida que crea el usuario en Firebase Auth y guarda sus datos en Firestore.
      * 
      * FUNCIONAMIENTO:
-     * - Usa el ID del usuario como ID del documento (para evitar duplicados)
-     * - set() sobrescribe el documento si existe, o lo crea si no existe
-     * - await() suspende la coroutine hasta que la operación termine
+     * 1. Crea usuario en Firebase Auth con email y contraseña (Auth maneja el hashing)
+     * 2. Obtiene el UID generado por Firebase Auth
+     * 3. Guarda los datos del usuario en Firestore usando el UID como ID de documento
+     * 4. NO guarda la contraseña en Firestore (solo existe en Firebase Auth)
      * 
-     * VENTAJAS DE USAR set() CON ID ESPECÍFICO:
-     * - Evita documentos duplicados
-     * - Permite actualizar el usuario usando el mismo ID
-     * - Facilita la búsqueda y gestión de documentos
+     * SEGURIDAD:
+     * - Firebase Auth maneja automáticamente el hashing de contraseñas
+     * - La contraseña NUNCA se almacena en Firestore
+     * - Solo el UID y datos de perfil se guardan en Firestore
      * 
-     * @param user User - El usuario a guardar
-     * @throws Exception si hay error de conexión o permisos
+     * @param user User - El usuario a crear (con contraseña en texto plano)
+     * @throws Exception si hay error de conexión, email duplicado o permisos
      */
     private suspend fun createFirebase(user: User){
+        // Crear usuario en Firebase Auth (Auth maneja el hashing automáticamente)
+        val authResult = auth.createUserWithEmailAndPassword(user.email, user.password).await()
+        val uid = authResult.user?.uid ?: throw Exception("Error al obtener el UID del usuario creado")
+        
+        // Guardar datos del usuario en Firestore (SIN la contraseña)
+        val userCopy = user.copy(
+            id = uid,
+            password = "" // NO guardar contraseña en Firestore
+        )
+        
         db.collection("users")
-            .document(user.id)
-            .set(user)
+            .document(uid)
+            .set(userCopy)
             .await()
+    }
+
+    /**
+     * INICIALIZACIÓN AUTOMÁTICA DEL USUARIO ADMINISTRADOR
+     * 
+     * Crea el usuario administrador predeterminado si no existe en Firebase.
+     * Se ejecuta automáticamente al inicializar el ViewModel.
+     * 
+     * CREDENCIALES DEL ADMIN:
+     * - Email: admin@unilocal.com
+     * - Password: Admin2025!
+     * - Role: ADMIN
+     * 
+     * FUNCIONAMIENTO:
+     * - Verifica si existe admin@unilocal.com en Firebase Auth
+     * - Si no existe: crea el usuario en Auth y guarda datos en Firestore
+     * - Si ya existe: no hace nada (idempotente)
+     * - Maneja errores silenciosamente para no interrumpir la app
+     */
+    private fun initializeAdminUser() {
+        viewModelScope.launch {
+            try {
+                // Intentar autenticar con credenciales de admin
+                auth.signInWithEmailAndPassword("admin@unilocal.com", "Admin2025!").await()
+                android.util.Log.d("UsersViewModel", "✅ Usuario administrador ya existe")
+                
+                // Cerrar sesión inmediatamente (solo verificamos existencia)
+                auth.signOut()
+                
+            } catch (e: Exception) {
+                // Si falla autenticación, el usuario no existe - crearlo
+                try {
+                    val adminUser = User(
+                        id = "", // Se asignará automáticamente por createFirebase
+                        name = "Administrador UniLocal",
+                        username = "admin",
+                        phone = "3001234567",
+                        email = "admin@unilocal.com",
+                        password = "Admin2025!",
+                        department = "Quindío",
+                        city = "Armenia",
+                        role = Role.ADMIN,
+                        favorites = emptyList()
+                    )
+                    
+                    createFirebase(adminUser)
+                    android.util.Log.d("UsersViewModel", "✅ Usuario administrador creado exitosamente")
+                    
+                    // Cerrar sesión para que el usuario pueda hacer login manualmente
+                    auth.signOut()
+                    
+                } catch (createError: Exception) {
+                    android.util.Log.e("UsersViewModel", "❌ Error al crear usuario administrador: ${createError.message}", createError)
+                }
+            }
+        }
     }
 
     /**
@@ -297,25 +333,25 @@ class UsersViewModel: ViewModel(){
     }
 
     /**
-     * FUNCIÓN DE LOGIN/AUTENTICACIÓN CON FIREBASE
+     * FUNCIÓN DE LOGIN/AUTENTICACIÓN CON FIREBASE AUTH
      * 
-     * Valida las credenciales del usuario (email y contraseña) contra Firebase.
+     * Valida las credenciales del usuario contra Firebase Auth.
      * Esta es la función principal de autenticación de la aplicación.
      * 
      * FUNCIONAMIENTO:
-     * - Hashea la contraseña ingresada usando SHA-256
-     * - Consulta Firebase para buscar usuario con email y password hasheado
-     * - Actualiza _currentUser con el usuario autenticado
-     * - Actualiza _reportResult con el estado de la operación
+     * 1. Autentica con Firebase Auth usando email y contraseña
+     * 2. Firebase Auth valida las credenciales automáticamente
+     * 3. Obtiene el UID del usuario autenticado
+     * 4. Carga los datos del usuario desde Firestore
+     * 5. Actualiza _currentUser con los datos
      * 
      * SEGURIDAD:
-     * - NUNCA compara contraseñas en texto plano
-     * - Hashea la contraseña ingresada y consulta Firebase con el hash
-     * - Los hashes son irreversibles (no se puede obtener la contraseña original)
-     * - Mismo input siempre produce mismo hash (determinístico)
+     * - Firebase Auth maneja automáticamente el hashing y validación
+     * - Las contraseñas nunca se transmiten en texto plano
+     * - Firebase Auth usa bcrypt para almacenar contraseñas
      * 
      * @param email String - Email del usuario
-     * @param password String - Contraseña del usuario (será hasheada antes de consultar)
+     * @param password String - Contraseña del usuario (en texto plano - Auth la hashea)
      * 
      * EJEMPLO DE USO:
      * ```
@@ -329,42 +365,42 @@ class UsersViewModel: ViewModel(){
             _reportResult.value = RequestResult.Loading
             
             try {
-                val hashedPassword = hashPassword(password)
-                loginFirebase(email, hashedPassword)
+                loginFirebase(email, password)
                 
                 if (_currentUser.value != null) {
                     _reportResult.value = RequestResult.Success("Inicio de sesión exitoso")
                 } else {
-                    _reportResult.value = RequestResult.Failure(errorMessage = "Email o contraseña incorrectos")
+                    _reportResult.value = RequestResult.Failure(errorMessage = "Error al cargar datos del usuario")
                 }
             } catch (e: Exception) {
-                _reportResult.value = RequestResult.Failure(errorMessage = e.message ?: "Error al iniciar sesión")
+                _reportResult.value = RequestResult.Failure(errorMessage = "Email o contraseña incorrectos")
                 android.util.Log.e("UsersViewModel", "Error al iniciar sesión: ${e.message}", e)
             }
         }
     }
 
     /**
-     * CONSULTA FIREBASE PARA LOGIN
+     * AUTENTICACIÓN CON FIREBASE AUTH Y CARGA DE DATOS
      * 
-     * Función suspendida que consulta Firestore para autenticar usuario.
+     * Función suspendida que autentica al usuario con Firebase Auth
+     * y carga sus datos desde Firestore.
+     * 
+     * FUNCIONAMIENTO:
+     * 1. Autentica con Firebase Auth (valida email y contraseña)
+     * 2. Obtiene el UID del usuario autenticado
+     * 3. Carga los datos completos del usuario desde Firestore
      * 
      * @param email String - Email del usuario
-     * @param hashedPassword String - Contraseña ya hasheada con SHA-256
-     * @throws Exception si hay error de conexión
+     * @param password String - Contraseña en texto plano (Auth la hashea)
+     * @throws Exception si las credenciales son incorrectas o hay error de conexión
      */
-    private suspend fun loginFirebase(email: String, hashedPassword: String) {
-        val snapshot = db.collection("users")
-            .whereEqualTo("email", email)
-            .whereEqualTo("password", hashedPassword)
-            .get()
-            .await()
-
-        val user = snapshot.documents.firstOrNull()?.toObject(User::class.java)?.apply {
-            this.id = snapshot.documents.first().id
-        }
-
-        _currentUser.value = user
+    private suspend fun loginFirebase(email: String, password: String) {
+        // Autenticar con Firebase Auth
+        val authResult = auth.signInWithEmailAndPassword(email, password).await()
+        val uid = authResult.user?.uid ?: throw Exception("No se pudo obtener el UID del usuario")
+        
+        // Cargar datos del usuario desde Firestore
+        findByIdFirebase(uid)
     }
 
     // ==================== GESTIÓN DE FAVORITOS ====================

@@ -81,7 +81,7 @@ fun ModerationRecordCard(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (record.action == "approved") {
+            containerColor = if (record.action == "APPROVE") {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
                 MaterialTheme.colorScheme.errorContainer
@@ -97,13 +97,13 @@ fun ModerationRecordCard(
         ) {
             // Icon
             Icon(
-                imageVector = if (record.action == "approved") {
+                imageVector = if (record.action == "APPROVE") {
                     Icons.Filled.CheckCircle
                 } else {
                     Icons.Filled.Cancel
                 },
                 contentDescription = record.action,
-                tint = if (record.action == "approved") {
+                tint = if (record.action == "APPROVE") {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.error
@@ -117,10 +117,10 @@ fun ModerationRecordCard(
             ) {
                 // Action
                 Text(
-                    text = if (record.action == "approved") "APROBADO" else "RECHAZADO",
+                    text = if (record.action == "APPROVE") "APROBADO" else "RECHAZADO",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (record.action == "approved") {
+                    color = if (record.action == "APPROVE") {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.error
@@ -160,7 +160,7 @@ fun ModerationRecordCard(
                 )
                 
                 // Reason (if rejected)
-                if (record.action == "rejected" && record.reason != null) {
+                if (record.action == "REJECT" && !record.reason.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Razón: ${record.reason}",

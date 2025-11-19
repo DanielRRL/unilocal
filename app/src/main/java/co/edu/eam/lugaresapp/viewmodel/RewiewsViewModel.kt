@@ -1,29 +1,33 @@
 package co.edu.eam.lugaresapp.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.edu.eam.lugaresapp.model.Review
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.time.LocalDateTime
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 /**
- * VIEWMODEL DE RESEÑAS uniLocal
+ * VIEWMODEL DE RESEÑAS uniLocal CON FIREBASE
  * 
  * Este ViewModel maneja toda la lógica de negocio relacionada con reseñas y valoraciones de lugares.
  * 
  * RESPONSABILIDADES:
- * - Gestión CRUD de reseñas
+ * - Gestión CRUD de reseñas en Firebase Firestore
  * - Filtrado de reseñas por lugar
  * - Sistema de respuestas de propietarios a reseñas
  * - Exposición reactiva de datos mediante StateFlow
+ * - Sincronización en tiempo real con Firebase
  * 
  * PATRÓN ARQUITECTÓNICO:
  * - StateFlow para exposición reactiva de datos
- * - Inmutabilidad mediante copy() y reasignación
- * - Sin efectos secundarios fuera del ViewModel
- * - Persistencia en memoria (temporal)
+ * - Firebase Firestore para persistencia
+ * - SnapshotListener para actualizaciones en tiempo real
+ * - viewModelScope para manejo de coroutines
  * 
  * CASOS DE USO:
  * - Usuarios pueden agregar reseñas a lugares
@@ -32,6 +36,9 @@ import java.util.UUID
  * - Consulta de reseñas por lugar específico
  */
 class RewiewsViewModel: ViewModel() {
+
+    // Firebase Firestore instance
+    private val db = FirebaseFirestore.getInstance()
 
     /**
      * Estado privado de reseñas
@@ -47,138 +54,114 @@ class RewiewsViewModel: ViewModel() {
     val reviews: StateFlow<List<Review>> = _reviews.asStateFlow()
 
     init {
-        loadSampleReviews()
+        loadReviews()
     }
 
     /**
-     * CARGA DE RESEÑAS DE PRUEBA
+     * CARGA DE RESEÑAS DESDE FIREBASE
      * 
-     * Carga datos de prueba para demostración.
-     * En producción, estos datos vendrían de una base de datos o API.
+     * Establece un SnapshotListener para sincronización en tiempo real.
+     * Cualquier cambio en Firebase se reflejará automáticamente en la UI.
      */
-    private fun loadSampleReviews() {
-        _reviews.value = listOf(
-            Review(
-                id = "review1",
-                userID = "2", // Daniel (usuario regular)
-                placeID = "1", // Restaurante El Paisa
-                rating = 5,
-                comment = "Excelente comida y servicio. Muy recomendado!",
-                date = LocalDateTime.now().minusDays(2),
-                ownerResponse = "Gracias por tu comentario! Esperamos verte pronto."
-            ),
-            Review(
-                id = "review2",
-                userID = "2",
-                placeID = "1",
-                rating = 4,
-                comment = "Buena comida pero un poco caro.",
-                date = LocalDateTime.now().minusDays(1)
-                // Sin respuesta del propietario
-            ),
-            Review(
-                id = "review3",
-                userID = "2",
-                placeID = "2", // Bar test 1
-                rating = 3,
-                comment = "Ambiente agradable pero demoran mucho.",
-                date = LocalDateTime.now().minusHours(5)
-            )
-        )
+    private fun loadReviews() {
+        viewModelScope.launch {
+            try {
+                db.collection("reviews")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            android.util.Log.e("RewiewsViewModel", "Error al cargar reseñas: ${error.message}", error)
+                            return@addSnapshotListener
+                        }
+
+                        if (snapshot != null) {
+                            val reviewsList = snapshot.documents.mapNotNull { document ->
+                                document.toObject(Review::class.java)?.apply {
+                                    val idField = this::class.java.getDeclaredField("id")
+                                    idField.isAccessible = true
+                                    idField.set(this, document.id)
+                                }
+                            }
+                            _reviews.value = reviewsList
+                            android.util.Log.d("RewiewsViewModel", "Reseñas cargadas: ${reviewsList.size}")
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("RewiewsViewModel", "Error al configurar listener de reseñas: ${e.message}", e)
+            }
+        }
     }
 
     // ==================== OPERACIONES CRUD ====================
 
     /**
-     * AGREGAR NUEVA RESEÑA
+     * AGREGAR NUEVA RESEÑA A FIREBASE
      * 
-     * Añade una nueva reseña a la lista de reseñas.
-     * La reseña se añade con los datos proporcionados.
-     * 
-     * FUNCIONAMIENTO:
-     * - Concatena la nueva reseña a la lista existente
-     * - El StateFlow notifica automáticamente el cambio
-     * - La UI se actualiza reactivamente
+     * Añade una nueva reseña a Firebase Firestore.
+     * El SnapshotListener actualizará automáticamente el StateFlow.
      * 
      * @param review Reseña a agregar
-     * 
-     * @example
-     * ```kotlin
-     * val newReview = Review(
-     *     id = UUID.randomUUID().toString(),
-     *     userID = currentUserId,
-     *     placeID = placeId,
-     *     rating = 5,
-     *     comment = "Excelente lugar!",
-     *     date = LocalDateTime.now()
-     * )
-     * rewiewsViewModel.addReview(newReview)
-     * ```
      */
     fun addReview(review: Review) {
-        _reviews.value = _reviews.value + review
+        viewModelScope.launch {
+            try {
+                addReviewFirebase(review)
+                android.util.Log.d("RewiewsViewModel", "Reseña agregada: ${review.id}")
+            } catch (e: Exception) {
+                android.util.Log.e("RewiewsViewModel", "Error al agregar reseña: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Función suspendida para agregar reseña a Firebase
+     */
+    private suspend fun addReviewFirebase(review: Review) {
+        db.collection("reviews")
+            .document(review.id)
+            .set(review)
+            .await()
     }
 
     /**
      * BUSCAR RESEÑAS POR LUGAR
      * 
      * Retorna todas las reseñas asociadas a un lugar específico.
-     * Útil para mostrar las valoraciones en la pantalla de detalle de un lugar.
-     * 
-     * FUNCIONAMIENTO:
-     * - Filtra la lista de reseñas por placeID
-     * - Retorna una nueva lista inmutable
-     * - No modifica el estado interno
      * 
      * @param placeId ID del lugar del cual obtener reseñas
      * @return Lista de reseñas del lugar especificado
-     * 
-     * @example
-     * ```kotlin
-     * val placeReviews = rewiewsViewModel.findByPlaceId("place123")
-     * // Usar placeReviews para mostrar en UI
-     * ```
      */
     fun findByPlaceId(placeId: String): List<Review> {
         return _reviews.value.filter { it.placeID == placeId }
     }
 
     /**
-     * RESPONDER A UNA RESEÑA
+     * RESPONDER A UNA RESEÑA EN FIREBASE
      * 
      * Permite al propietario de un lugar responder a una reseña específica.
-     * Actualiza el campo ownerResponse de la reseña.
-     * 
-     * FUNCIONAMIENTO:
-     * - Busca la reseña por ID
-     * - Crea una copia con el campo ownerResponse actualizado
-     * - Mantiene las demás reseñas sin cambios
-     * - El StateFlow notifica automáticamente el cambio
-     * 
-     * VALIDACIÓN:
-     * - Se recomienda validar que el usuario que responde sea el propietario del lugar
-     * - Esta validación debe hacerse en la capa de UI o en un caso de uso
+     * Actualiza el campo ownerResponse en Firebase.
      * 
      * @param reviewId ID de la reseña a la que se responde
      * @param response Texto de la respuesta del propietario
-     * 
-     * @example
-     * ```kotlin
-     * // Propietario responde a una reseña
-     * rewiewsViewModel.replyToReview(
-     *     reviewId = "review123",
-     *     response = "Gracias por tu comentario, trabajaremos en mejorar!"
-     * )
-     * ```
      */
     fun replyToReview(reviewId: String, response: String) {
-        _reviews.value = _reviews.value.map { review ->
-            if (review.id == reviewId) {
-                review.copy(ownerResponse = response)
-            } else {
-                review
+        viewModelScope.launch {
+            try {
+                replyToReviewFirebase(reviewId, response)
+                android.util.Log.d("RewiewsViewModel", "Respuesta agregada a reseña: $reviewId")
+            } catch (e: Exception) {
+                android.util.Log.e("RewiewsViewModel", "Error al agregar respuesta: ${e.message}", e)
             }
         }
+    }
+
+    /**
+     * Función suspendida para actualizar respuesta en Firebase
+     */
+    private suspend fun replyToReviewFirebase(reviewId: String, response: String) {
+        db.collection("reviews")
+            .document(reviewId)
+            .update("ownerResponse", response)
+            .await()
     }
     
     /**
@@ -194,31 +177,32 @@ class RewiewsViewModel: ViewModel() {
     }
 
     /**
-     * ELIMINAR RESEÑA
+     * ELIMINAR RESEÑA DE FIREBASE
      * 
-     * Elimina una reseña de la lista por su ID.
+     * Elimina una reseña de Firebase Firestore.
      * Útil para moderación de contenido inapropiado.
      * 
-     * FUNCIONAMIENTO:
-     * - Filtra la lista excluyendo la reseña con el ID especificado
-     * - Crea una nueva lista sin la reseña eliminada
-     * - El StateFlow notifica automáticamente el cambio
-     * 
-     * CASOS DE USO:
-     * - Administradores eliminan contenido inapropiado
-     * - Usuarios eliminan sus propias reseñas
-     * - Sistema automático de moderación
-     * 
      * @param reviewId ID de la reseña a eliminar
-     * 
-     * @example
-     * ```kotlin
-     * // Administrador elimina reseña inapropiada
-     * rewiewsViewModel.deleteReview("review123")
-     * ```
      */
     fun deleteReview(reviewId: String) {
-        _reviews.value = _reviews.value.filter { it.id != reviewId }
+        viewModelScope.launch {
+            try {
+                deleteReviewFirebase(reviewId)
+                android.util.Log.d("RewiewsViewModel", "Reseña eliminada: $reviewId")
+            } catch (e: Exception) {
+                android.util.Log.e("RewiewsViewModel", "Error al eliminar reseña: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Función suspendida para eliminar reseña de Firebase
+     */
+    private suspend fun deleteReviewFirebase(reviewId: String) {
+        db.collection("reviews")
+            .document(reviewId)
+            .delete()
+            .await()
     }
 
     // ==================== OPERACIONES DE CONSULTA Y ANÁLISIS ====================
@@ -239,7 +223,6 @@ class RewiewsViewModel: ViewModel() {
      * OBTENER RESEÑAS DE UN USUARIO
      * 
      * Retorna todas las reseñas creadas por un usuario específico.
-     * Útil para mostrar el historial de reseñas de un usuario.
      * 
      * @param userId ID del usuario
      * @return Lista de reseñas del usuario
@@ -252,7 +235,6 @@ class RewiewsViewModel: ViewModel() {
      * CALCULAR PROMEDIO DE CALIFICACIÓN
      * 
      * Calcula el promedio de rating para un lugar específico.
-     * Útil para mostrar la calificación general de un lugar.
      * 
      * @param placeId ID del lugar
      * @return Promedio de rating o 0.0 si no hay reseñas
@@ -279,7 +261,6 @@ class RewiewsViewModel: ViewModel() {
      * OBTENER RESEÑAS CON RESPUESTA
      * 
      * Retorna solo las reseñas que tienen respuesta del propietario.
-     * Útil para análisis de engagement.
      * 
      * @param placeId ID del lugar (opcional)
      * @return Lista de reseñas con respuesta
@@ -297,7 +278,6 @@ class RewiewsViewModel: ViewModel() {
      * OBTENER RESEÑAS SIN RESPUESTA
      * 
      * Retorna reseñas que aún no han sido respondidas por el propietario.
-     * Útil para propietarios que quieren gestionar sus respuestas pendientes.
      * 
      * @param placeId ID del lugar
      * @return Lista de reseñas sin respuesta
